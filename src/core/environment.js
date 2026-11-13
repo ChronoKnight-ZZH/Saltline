@@ -1,4 +1,5 @@
 // Environment state hub: timeOfDay x weather, visibility model, perception.
+import { defineModuleExports } from "../vendor/three-r180.js";
 import { createRandom } from "./random.js";
 import { damp } from "./math.js";
 import {
@@ -115,6 +116,34 @@ function createEnvironment(context) {
       let want = !!state.target.lightningEnabled;
       if (context.lightning.enabled !== want) {
         context.lightning.setEnabled(want);
+      }
+    }
+    // M5：表现层——灯光、地面反射。
+    // 这些只在切换时变一次，放这里避免每帧重复写入。
+    let lampOn = t.lampOn,
+      lampsOn = lampOn > 0.05;
+    if (context.level && context.level.setLights) {
+      try {
+        context.level.setLights(lampsOn, lampOn);
+      } catch (e) {
+        console.error("[environment] level.setLights threw: " + (e && e.stack ? e.stack : e));
+      }
+    }
+    if (context.backdrop && context.backdrop.setLights) {
+      try {
+        context.backdrop.setLights(lampsOn, lampOn);
+      } catch (e) {
+        console.error("[environment] backdrop.setLights threw: " + (e && e.stack ? e.stack : e));
+      }
+    }
+    if (context.ground && context.ground.setReflections) {
+      // 平面反射：画质允许 + 有雨/湿地面
+      let planar = !!(context.quality && context.quality.planar > 0),
+        wet = t.rainLevel > 0.3 || t.wetness > 0.4;
+      try {
+        context.ground.setReflections(planar && wet);
+      } catch (e) {
+        console.error("[environment] ground.setReflections threw: " + (e && e.stack ? e.stack : e));
       }
     }
   }
@@ -322,4 +351,48 @@ function createEnvironment(context) {
   return system;
 }
 
-export { createEnvironment };
+// M5：`?show=environment` 展示模式。
+// environment 已在 runtime 的公共段初始化，这里只负责相机与定时切换。
+var environmentShowcaseModule = {};
+
+defineModuleExports(environmentShowcaseModule, {
+  create: () => createEnvironment,
+  showcase: () => showcaseEnvironment,
+});
+
+function showcaseEnvironment(context) {
+  let times = ["dawn", "noon", "dusk", "midnight"],
+    weathers = ["clear", "overcast", "lightRain", "heavyRain"],
+    ti = 0,
+    wi = 0,
+    tAcc = 0,
+    wAcc = 0,
+    TIME_STEP = 6,
+    WEATHER_STEP = 4;
+  return {
+    cam: [-9, 1.7, 5.6],
+    target: [14, 0.4, 5],
+    update(dt) {
+      let env = context.environment;
+      if (!env) return;
+      tAcc += dt;
+      if (tAcc >= TIME_STEP) {
+        tAcc = 0;
+        ti = (ti + 1) % times.length;
+        env.setTimeOfDay(times[ti]);
+      }
+      wAcc += dt;
+      if (wAcc >= WEATHER_STEP) {
+        wAcc = 0;
+        wi = (wi + 1) % weathers.length;
+        env.setWeather(weathers[wi]);
+      }
+    },
+  };
+}
+
+export {
+  createEnvironment,
+  environmentShowcaseModule,
+  showcaseEnvironment,
+};

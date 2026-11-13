@@ -173,3 +173,58 @@
 | `post.flash` 增加逐帧衰减 | **M4.md 漏项**：原版只有 game flow 写 `post.flash = 0`，从不衰减；闪电写入后会永久泛白。`renderer.frame()` 内按 `exp(-3.2*dt)` 收敛 |
 | `renderer` 订阅放在 `N` 定义之后 | 订阅回调访问 `N.post.flash`；写在 `N` 之前会踩 TDZ |
 | `_flash` 的 `night` 用 `dusk.lampOn=0.7` 也判夜晚 | M4.md §10 第 10 条明确标注需确认；黄昏雷雨天色已暗，全屏 flash 合理。若认为过亮，改 `NIGHT_LAMP_ON` 一处即可 |
+
+## M5 表现层与降级验收（2026-11-13）
+
+目标：音频天气层、灯光、地面反射、`?show=environment`、HUD 收尾。
+
+### 静态与构建
+
+| 项目 | 结果 |
+| --- | --- |
+| `npm run check` | 通过：72 模块 + 契约 + 归档与字体校验 |
+| `npm run build` | 通过：77 模块，`dist/index.html` 1,441.61 kB（gzip 445.40 kB） |
+
+### 前置契约核实（推翻方案中的 2 个假设）
+
+开工前逐项核对了 M5.md §2 与 §8 的 28 条依赖，发现两处方案前提与实际代码不符：
+
+| 方案假设 | 实际情况 | 处置 |
+| --- | --- | --- |
+| `effects.setRainIntensity(level)` 驱动「全局雨幕粒子」，`envRainParticles` 控制粒子数 | **`effects.js` 完全没有雨幕系统**。雨幕是 `world/ground/water.js` 的内部 shader（`rain` + `splash` 两个 mesh），已由 `ground.setRain` 驱动，自带 `b ≈ 0.8/s` 平滑与 `visible = rainLevel > 0.01`，**没有可调粒子数** | 不新增 `effects.setRainIntensity`（会是死代码）；`envRainParticles` **确认无消费方**，已在 WIKI 记录。雨幕强度已由 M1 的 `ground.setRain(rainLevel)` 正确驱动 |
+| `backdrop.lamps` 有 `emissive/emissiveIntensity`，`traverse` 设 `emissiveIntensity` | `lamps` 是 `pb()` 合批的**单个 `MeshBasicMaterial`**（`vertexColors` + 自定义闪烁 shader），**无 emissive** | `setLights` 改用 `visible + opacity`（关闭时 `opacity=0` 且 `visible=false`），保留闪烁 shader 相位 |
+
+另外确认：`level.skylights` 是**天窗位置数据数组** `{x,y,z,w,d}`（不是灯光对象），只有 `shedLights` 是 4 盏 `PointLight`（intensity 34、distance 13）。
+
+### 无头逻辑冒烟（临时脚本，已删除）
+
+三组共 56 项断言全部通过：
+
+| 组 | 覆盖 |
+| --- | --- |
+| environment 驱动（26） | 音频倍率随 `environment:changed` 更新、`lampOn` 阈值、`level/backdrop.setLights` 调用、`setReflections` 的 `planar && wet` 组合（含 `planar=0` 时雨天也关）、showcase 模块形状与推进、**全 `null` 子系统不抛错** |
+| 真实 audio.js（19） | `setWeather/setTimeOfDay` 存在、4 种天气倍率映射、4 种时间 mood 映射、非法值回退、`environment:changed` 全量/偏量/`null` payload、`update()` 在 `weatherMul` 生效后不抛错 |
+| 真实灯光实现（11） | `backdrop` 的 `visible/opacity` 三档（午/黎明/午夜）+ `transparent` 标记；`level` 的 34 → 13.6 → 0 → 34 **无漂移**、`0.05` 阈值两侧行为 |
+
+### 浏览器验收
+
+| 场景 | 预期 | 状态 |
+| --- | --- | --- |
+| `?weather=heavyRain` vs `clear` | 雨声/风声明显差异，海声略降 | 待人工复验 |
+| `?time=midnight` / `noon` / `dusk` / `dawn` | 音乐氛围分别偏 dark / bright / warm / calm | 待人工复验 |
+| `?time=midnight` | 远景灯 + 棚区 4 盏点光亮；`noon` 全灭；`dawn` 半亮 | 待人工复验 |
+| `?weather=heavyRain` / `clear` | 地面反射开/关；`?q=low` 恒关 | 待人工复验 |
+| `?show=environment` | 每 6s 换时间、每 4s 换天气，直升机/闪电随之启停 | 待人工复验 |
+| `?shot=1` 回归 | `dawn/clear`：反射关、棚灯 `0.4×`、音频 `calm` | 待人工复验 |
+
+### 与 M5.md 的偏差记录
+
+| 偏差 | 原因 |
+| --- | --- |
+| **不实现 `effects.setRainIntensity`**（G4/G10） | 前后端均无雨幕粒子系统；雨幕是 ground 内部 shader。新增接口是死代码 |
+| **不消费 `QUALITY_PRESETS.envRainParticles`** | 同上，没有可钳制的粒子数。字段保留（无副作用） |
+| `backdrop.setLights` 用 `opacity` 而非 `emissiveIntensity` | 材质是 `MeshBasicMaterial`，无 emissive |
+| `level.setLights` 只处理 `shedLights` | `skylights` 是位置数据数组，不是灯光对象 |
+| `weather/musicMood` 用 `Object.defineProperties` 而非 `Object.assign` getter | **实机 bug**：`Object.assign` 会把 getter **求值成快照**，导致 `setWeather` 后读到的仍是初值。首轮测试 9 项失败即此原因 |
+| `audio.update` 只改 4 行（乘 `weatherMul`） | `setWeather` 直接写 gain 会被下一帧 `update` 覆盖；方案 §3.1.1 自己也指出了这点 |
+| HUD 准星闪白与暴露投影未重做 | M4 已加 `.h-cross.flash` + 闪白订阅；M3 已实现世界坐标投影。M5 只确认，不重复实现 |

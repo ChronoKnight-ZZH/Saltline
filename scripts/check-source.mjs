@@ -15,7 +15,11 @@ const EXPECTED_ENV_MODULES = [
 ];
 
 const EXPECTED_EXPORTS = {
-  "src/core/environment.js": ["createEnvironment"],
+  "src/core/environment.js": [
+    "createEnvironment",
+    "environmentShowcaseModule",
+    "showcaseEnvironment",
+  ],
   "src/core/environment-presets.js": [
     "TIME_PRESETS",
     "WEATHER_PRESETS",
@@ -37,6 +41,7 @@ const EXPECTED_IMPORTS = {
     "TIME_PRESETS",
     "WEATHER_PRESETS",
   ],
+  "src/app/showcases.js": ["environmentShowcaseModule"],
   "src/audio/library.js": ["_9"],
   "src/core/environment.js": ["LIGHTNING_TIMING"],
 };

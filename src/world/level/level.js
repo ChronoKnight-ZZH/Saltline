@@ -400,6 +400,16 @@ async function createLevel(context) {
     groundSurfaceAt(z, H) {
       return t.isMetal(z, H) ? "metal" : "concrete";
     },
+    // M5：灯光由 lampOn 驱动。
+    // shedLights 是 PointLight 数组（builder 中记录了 baseIntensity）；
+    // skylights 是「天窗」位置数据数组，不是灯光对象，因此不处理。
+    setLights(z, H) {
+      let O = Math.max(0, Math.min(1, +H || 0)),
+        q = !!z && O > 0.05,
+        U = n.lights || [];
+      for (let T of U)
+        T && T.isLight && (T.intensity = q ? (T.userData.baseIntensity || 1) * O : 0);
+    },
     update(z) {
       (n.update(z), h.update(z));
       for (let H = 0; H < t.updaters.length; H++)

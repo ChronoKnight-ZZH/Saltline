@@ -1245,6 +1245,8 @@ function ab(i) {
     let J = new PointLight(16761994, 34, 13, 2);
     (J.position.set(L, 5.75, Z),
       (J.castShadow = !1),
+      // M5：记录基准强度，供 level.setLights 按 lampOn 缩放。
+      J.userData.baseIntensity = J.intensity,
       i.dynRoot.add(J),
       P.push(J));
   }

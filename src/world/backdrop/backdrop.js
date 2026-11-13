@@ -130,6 +130,24 @@ function Eb(i, { only: e = null, showcase: t = !1 } = {}) {
       extractionPoint: new Vector3(30, 0, 20),
       shipName: "KITTIWAKE",
       craneId: "SALTLINE 04",
+      // M5：远景灯由 lampOn 驱动。
+      // lamps 是合批的 MeshBasicMaterial（vertexColors + 闪烁 shader），
+      // 没有 emissive/emissiveIntensity，因此用「显隐 + 透明度」表达亮灭：
+      // 保留闪烁 shader 的相位，不因切换而重置。
+      setLights(on, intensity) {
+        if (!f) return;
+        let level = Math.max(0, Math.min(1, +intensity || 0));
+        let lit = !!on && level > 0.05;
+        f.visible = lit;
+        let mat = f.material;
+        if (!mat) return;
+        if (mat.transparent !== !0) {
+          mat.transparent = !0;
+          mat.needsUpdate = !0;
+        }
+        // 0.35 起步避免「刚点亮就最亮」，1.0 时完全不满亮度
+        mat.opacity = lit ? 0.35 + 0.65 * level : 0;
+      },
       stats: {
         tris: Math.round(v),
         drawCalls: g,

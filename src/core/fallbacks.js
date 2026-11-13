@@ -14,11 +14,15 @@ var FALLBACKS = {
     wetnessAt: () => 0.5,
     isPuddle: () => !1,
     setRain: noop,
+    // M5：environment.applyStatic 会调；stub 下保持关
+    setReflections: noop,
     rainLevel: 0,
   }),
   backdrop: () => ({
     stub: !0,
     update: noop,
+    // M5：environment.applyStatic 会调
+    setLights: noop,
   }),
   fx: () => ({
     stub: !0,
@@ -57,6 +61,11 @@ var FALLBACKS = {
       setInterior: noop,
       setVolume: noop,
       setPaused: noop,
+      // M5：环境驱动
+      setWeather: noop,
+      setTimeOfDay: noop,
+      weather: { rain: 1, wind: 1, sea: 1 },
+      musicMood: "calm",
     };
   },
   weapon: () => ({

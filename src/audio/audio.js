@@ -442,7 +442,47 @@ function u_(i, e, t) {
     _e = -9,
     Te = -9,
     Pe = {},
-    Re = {
+    // M5：天气/时间对音频层的额外倍率。原版 4 个环境层（rain/rainIn/wind/sea）
+    // 增益恒定，不随天气变化；M5 用独立倍率相乘，不改原版的基础公式。
+    // 初值取 clear/overcast 之间的中性值，避免 ?shot=1 静默改变音量。
+    weatherMul = {
+      rain: 1,
+      wind: 1,
+      sea: 1,
+    },
+    // M5：musicMood 对 5 层音乐的额外倍率。按 tm 的键名索引，
+    // 不依赖 we() 返回值的顺序（tm[1] 是 music_ost，与 we 的第 5 项对应）。
+    musicMood = "calm",
+    MOOD_MUL = {
+      calm: { music_drone: 1.0, music_ost: 0.9, music_perc: 0.3, music_brass: 0.4, music_motif: 0.6 },
+      bright: { music_drone: 0.7, music_ost: 0.9, music_perc: 1.0, music_brass: 1.0, music_motif: 0.9 },
+      warm: { music_drone: 0.9, music_ost: 0.95, music_perc: 0.6, music_brass: 0.8, music_motif: 0.8 },
+      dark: { music_drone: 1.2, music_ost: 0.85, music_perc: 0.4, music_brass: 0.3, music_motif: 0.5 },
+    },
+    WEATHER_GAIN = {
+      clear: { rain: 0.0, wind: 0.25, sea: 0.6 },
+      overcast: { rain: 0.12, wind: 0.45, sea: 0.7 },
+      lightRain: { rain: 0.55, wind: 0.65, sea: 0.8 },
+      heavyRain: { rain: 1.0, wind: 0.9, sea: 0.9 },
+    },
+    TIME_MOOD = {
+      dawn: "calm",
+      noon: "bright",
+      dusk: "warm",
+      midnight: "dark",
+    };
+  // M5：天气 → 雨/风/海倍率。只改目标乘子，实际增益由 lu() 每帧计算。
+  function applyWeather(te) {
+    let he = WEATHER_GAIN[te] || WEATHER_GAIN.clear;
+    weatherMul.rain = he.rain;
+    weatherMul.wind = he.wind;
+    weatherMul.sea = he.sea;
+  }
+  // M5：时间 → 音乐氛围
+  function applyTimeOfDay(te) {
+    musicMood = TIME_MOOD[te] || "calm";
+  }
+  let Re = {
       autoIntensity: !0,
     };
   function Fe(te, he, pe, ge) {
@@ -1259,6 +1299,13 @@ function u_(i, e, t) {
       }
       (ee === "complete" && Zo(),
         ee === "paused" ? (ue = !0) : he === "paused" && (ue = !1));
+    }),
+    // M5：环境切换 → 音频天气层与音乐氛围。
+    // 只在切换时调一次，不每帧轮询；实际增益由 lu() 每帧平滑推进。
+    ln("environment:changed", (te) => {
+      if (!te) return;
+      te.weather && applyWeather(te.weather);
+      te.timeOfDay && applyTimeOfDay(te.timeOfDay);
     }));
   function yr() {
     if ((($ = !0), e.state !== "running" && e.state !== "closed"))
@@ -1358,11 +1405,11 @@ function u_(i, e, t) {
       (w.gain.value = me),
       (nn -= te) <= 0 && ((nn = 3 + s() * 6), (ut = 0.12 + s() * 0.88)),
       (pt += (ut - pt) * ye(0.5)),
-      Oe.rain.setGain(fe * (1 - 0.93 * P) * 0.95),
-      Oe.rainIn.setGain(fe * P * 0.95),
-      Oe.wind.setGain(fe * (0.3 + 0.7 * pt) * (1 - 0.65 * P) * 0.75),
+      Oe.rain.setGain(fe * (1 - 0.93 * P) * 0.95 * weatherMul.rain),
+      Oe.rainIn.setGain(fe * P * 0.95 * weatherMul.rain),
+      Oe.wind.setGain(fe * (0.3 + 0.7 * pt) * (1 - 0.65 * P) * 0.75 * weatherMul.wind),
       Oe.wind.setPitch(0.9 + 0.25 * pt),
-      Oe.sea.setGain(fe * (1 - 0.5 * P) * 1),
+      Oe.sea.setGain(fe * (1 - 0.5 * P) * 1 * weatherMul.sea),
       Oe.sea.setPos([33, -1, pi(re.z, -28, 26)]),
       !ue &&
         (ke || ee === "title" || ee === "complete") &&
@@ -1378,10 +1425,13 @@ function u_(i, e, t) {
       Xe.on)
     ) {
       let De = we(L),
-        it = ye(1 / 0.5);
+        it = ye(1 / 0.5),
+        mood = MOOD_MUL[musicMood] || MOOD_MUL.calm;
       for (let gt = 0; gt < tm.length; gt++) {
-        let Ot = Xe.layers[tm[gt]];
-        ((Ot.c += (De[gt] - Ot.c) * it), (Ot.g.gain.value = Ot.c));
+        let Ot = Xe.layers[tm[gt]],
+          // M5：按层名查 mood 倍率（不依赖 we() 的返回顺序）
+          target = De[gt] * (mood[tm[gt]] || 1);
+        ((Ot.c += (target - Ot.c) * it), (Ot.g.gain.value = Ot.c));
       }
     }
     for (let De of We)
@@ -1646,6 +1696,13 @@ function u_(i, e, t) {
       setPaused(te) {
         ue = !!te;
       },
+      // M5：天气 → 雨/风/海层增益倍率。只改目标乘子，
+      // 实际增益仍由 update() 每帧按 fe/P/pt 计算，避免被下一帧覆盖。
+      setWeather: applyWeather,
+      // M5：时间 → 音乐氛围倍率（calm/bright/warm/dark）
+      setTimeOfDay: applyTimeOfDay,
+      // 注：weather / musicMood 是实时值，不能用 Object.assign 的 getter
+      // （assign 会把 getter 求值成快照），在下方用 defineProperties 定义。
       names: Object.keys(Go).filter((te) => !Go[te].ir),
       get intensity() {
         return L;
@@ -1673,6 +1730,27 @@ function u_(i, e, t) {
           gameState: ee,
           reverb: [!!D.buffer, !!C.buffer],
         };
+      },
+    }),
+    // M5：weather / musicMood 必须是实时 getter。
+    // 前面用 Object.assign 定义 getter 会被求值成快照（assign 复制的是值），
+    // 所以这里用 defineProperties 保留 getter 语义。
+    Object.defineProperties(Re, {
+      weather: {
+        get() {
+          return {
+            rain: weatherMul.rain,
+            wind: weatherMul.wind,
+            sea: weatherMul.sea,
+          };
+        },
+        enumerable: !0,
+      },
+      musicMood: {
+        get() {
+          return musicMood;
+        },
+        enumerable: !0,
       },
     }),
     Re

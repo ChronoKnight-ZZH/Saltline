@@ -80,6 +80,8 @@ window.__G;        // 运行中的游戏上下文
 
 `window.__G.lightning.trigger()` 可立即触发一次闪电（调试用），`window.__G.helicopter.setEnabled(true)` 可强制开光柱。
 
+`window.__G.audio.setWeather("heavyRain")` / `setTimeOfDay("midnight")` 可手动切音频层，`__G.audio.weather` / `__G.audio.musicMood` 读当前倍率（M5）。`?show=environment` 每 6s 换时间、每 4s 换天气。
+
 ## 原版调试参数
 
 | URL | 用途 |
@@ -93,6 +95,7 @@ window.__G;        // 运行中的游戏上下文
 | `/?shot=1&q=test&seed=4207&dt=0&noaudio=1&cam=-32,1.68,6,0,1.68,6` | 本次回归使用的固定时间、种子、镜头场景 |
 | `/?time=midnight&weather=heavyRain` | 固定时间/天气（M1 起） |
 | `/?time=dawn&weather=clear` | 显式默认组合，`force: true` 应用 |
+| `/?show=environment` | 时间/天气/直升机/闪电展示，每 6s/4s 自动切换（M5） |
 
 首次启动的画质也会受到已保存设置影响；验收时应同时记录 URL 和设置。不同机器的 GPU 性能不能直接比较。
 

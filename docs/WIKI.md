@@ -387,7 +387,7 @@ src/
 - **boot-screen.js**：缓存 `#boot`、`#boot-msg`、`#boot-fill`，提供异步启动进度；每次更新后 `setTimeout(0)` 让出主线程。
 - **diagnostics.js**：在导入期初始化 `window.__frames/__ready/__fatal/__errors`，包装 `console.error`，提供 `showFatalError`。
 - **benchmark.js**：生成 `#bench` 面板，沿 `level.cinematicPath` 或默认路径巡游相机，统计 avg/median/p99 帧时间。
-- **showcases.js**：把 9 个展示模块聚合成 `SHOWCASE_MODULES`，键为 `mats/level/backdrop/ground/fx/weapon/enemies/props/render`。
+- **showcases.js**：把 10 个展示模块聚合成 `SHOWCASE_MODULES`，键为 `mats/level/backdrop/ground/fx/weapon/enemies/props/render/environment`。
 - **showcase-stubs.js**：为展示模式提供零输入的 `input` 与静止的 `player`，避免展示场景依赖完整玩法。
 
 #### 3.2.2 基础能力（`core/`）
@@ -667,6 +667,7 @@ title ──start()──▶ intro ──introlSeconds──▶ playing
 | `enemies` | `enemies/enemies.js` | 敌人编队 |
 | `props` | `world/props/props.js` | 道具陈列 |
 | `render` | `render/renderer.js` | 渲染管线 |
+| `environment` | `core/environment.js` | 时间/天气/直升机/闪电（M5），每 6s 换时间、每 4s 换天气 |
 
 ---
 
@@ -987,9 +988,10 @@ console.log("visibility", env.visibility, "wetness", env.wetness);
 - `apply()` 会调用 `render.rebakeEnvironment()`，在 `?q=low` 下 rebake 为空操作，`__G.render.env` 保持启动值。
 - `combine(timePreset, weatherPreset)` 是纯函数，合并两个预设的覆盖项、乘算天气因子，不修改环境状态。
 - `LIGHTNING_TIMING` 控制闪电高能窗口（`high = 0.8s`）与基础间隔；`HELICOPTER_TUNING` 控制光柱半径/高度/锥角/扫描频率。
-- `lampOn` 是只读 getter（0..1），供 `lightning` 判定夜晚（`> 0.5`）。
+- `lampOn` 是只读 getter（0..1），供 `lightning` 判定夜晚（`> 0.5`）与 M5 的灯光驱动（阈值 `> 0.05`）。
 - `_onLightningFlash()` 触发能见度脉冲（`lightningT = 0.8`，连续闪电取 max 不叠加）并执行 `scanLightningExpose`。
 - 能见度回落用 `damp(..., 5, dt)`，约 0.8s 衰减到 1/e。
+- M5 起 `applyStatic` 还驱动 `level.setLights` / `backdrop.setLights`（按 `lampOn`）与 `ground.setReflections`（`quality.planar > 0 &&` 有雨/湿地面）。
 
 ### 4.2 装配与渲染（`app/`、`render/`）
 
@@ -1408,11 +1410,13 @@ async function createLevel(context): Promise<LevelSystem>;
 | `interiorBoxes` | `{ min, max }[]` | 室内包围盒（用于武器湿度） |
 | `cinematicPath` | `{ pos, look }[]` | 过场/基准相机路径 |
 | `coverPoints` | `Vector3[]` | 掩体点 |
-| `skylights` / `shedLights` | `object` | 灯光配置 |
+| `skylights` | `{x,y,z,w,d}[]` | 天窗位置数据（**不是**灯光对象） |
+| `shedLights` | `PointLight[]` | 棚区 4 盏点光；每盏有 `userData.baseIntensity` |
 | `vantage` | `{ stairsFoot, roof }` | 登高点 |
 | `stats` | `{ labelsAtlased, containers, props, tris, meshes }` | 构建统计 |
 | `placed` | `Array` | 已放置道具 |
 | `groundSurfaceAt(x, z)` | `"metal" \| "concrete"` | 地面材质 |
+| `setLights(on, intensity)` | `void` | 按 `lampOn` 缩放 `shedLights`（M5）；`skylights` 是数据数组，不处理 |
 | `update(dt)` | `void` | 驱动动态道具/标签/动画 |
 
 `Objective` 结构：
@@ -1460,6 +1464,7 @@ async function createBackdrop(context): Promise<BackdropSystem>;
 | `extractionPoint` | 撤离点 `(30, 0, 20)` |
 | `shipName` / `craneId` | 船名/吊机编号 |
 | `stats` | `{ tris, drawCalls }` |
+| `setLights(on, intensity)` | 按 `lampOn` 控制 `lamps` 显隐与透明度（M5） |
 | `update(dt)` | 驱动吊具摆动、雷达旋转、船体起伏、海鸥 |
 
 示例：
@@ -1469,7 +1474,10 @@ const backdrop = await createBackdrop(context);
 backdrop.update(dt);
 ```
 
-注意事项：远景默认注册 `tag: "backdrop"` 的碰撞盒；展示模式会缩小船体并跳过部分碰撞。
+注意事项：
+
+- 远景默认注册 `tag: "backdrop"` 的碰撞盒；展示模式会缩小船体并跳过部分碰撞。
+- `backdrop.lamps` 是**合批的 `MeshBasicMaterial`**（`vertexColors` + 闪烁 shader），没有 `emissive/emissiveIntensity`；`setLights` 用「`visible` + `opacity`」表达亮灭，保留闪烁相位。
 
 #### 4.3.4 `createGround(context)`
 
@@ -1509,6 +1517,8 @@ if (context.ground.isPuddle(player.pos.x, player.pos.z)) {
 - 地面纹理依赖 `document.fonts` 加载标线字体，最多等待 350 ms。
 - 海面高度用于漂浮/水花判定；不要把它当作碰撞高度。
 - `setReflections(false)` 可显著降低低端设备开销。
+- **雨幕本身由 `ground` 内部的 `water.js` shader 实现**（`rain`/`splash` 两个 mesh），`setRain` 同时驱动雨量、水面涟漪与雨幕可见性（`rainLevel > 0.01` 才显示）。没有独立的「雨幕粒子数」参数，`QUALITY_PRESETS.envRainParticles` 因此无消费方（M5 确认）。
+- M5 起 `environment.applyStatic` 会按 `quality.planar > 0 && (rainLevel > 0.3 || wetness > 0.4)` 自动调 `setReflections`。
 
 #### 4.3.5 `createProps(context)` 与 `registerProp`
 
@@ -1898,6 +1908,10 @@ async function createAudio(context): Promise<AudioSystem>;
 | `setInterior(0..1)` | `void` | 室内程度 |
 | `setVolume(0..1)` | `void` | 主音量 |
 | `setPaused(bool)` | `void` | 暂停调度 |
+| `setWeather(w)` | `void` | 天气 → 雨/风/海层增益倍率（M5）；接 `environment:changed` 自动调用 |
+| `setTimeOfDay(t)` | `void` | 时间 → 音乐氛围（M5）：`dawn=calm`/`noon=bright`/`dusk=warm`/`midnight=dark` |
+| `weather` | `{rain, wind, sea}` | 当前倍率（只读 getter） |
+| `musicMood` | `string` | 当前氛围（只读 getter） |
 | `selfTest()` | `object` | 离线渲染自检 |
 | `debug()` | `object` | 队列、voice、混响、音乐状态 |
 | `names` | `string[]` | 可用非 IR 音色 |
@@ -2113,7 +2127,7 @@ context.game.resume();
 | `app/boot-screen.js` | 启动进度文本/进度条、浏览器让步 | 无 | `bootElement`、`setBootProgress`、`bootMessage`、`bootProgress`、`yieldToBrowser` | 长初始化期间给出可见反馈 |
 | `app/diagnostics.js` | 全局错误捕获、致命错误展示、控制台包装 | 无 | `showFatalError` | 让启动失败可见且可诊断 |
 | `app/benchmark.js` | 巡游基准、帧时间统计面板 | vendor | `enableBenchmark(context)` | 性能回归与 GPU 信息采集 |
-| `app/showcases.js` | 聚合 9 个展示模块 | `render/*`、`world/*`、`effects/effects`、`weapons/weapon`、`enemies/enemies` | `SHOWCASE_MODULES` | 用 URL 参数快速检视单个子系统 |
+| `app/showcases.js` | 聚合 10 个展示模块 | `render/*`、`world/*`、`effects/effects`、`weapons/weapon`、`enemies/enemies`、`core/environment` | `SHOWCASE_MODULES` | 用 URL 参数快速检视单个子系统 |
 | `app/showcase-stubs.js` | 展示模式的输入/玩家桩 | vendor、`core/config` | `createShowcaseInput`、`createShowcasePlayer` | 展示场景不需要完整玩法依赖 |
 
 ### 5.3 基础能力（`src/core/`）

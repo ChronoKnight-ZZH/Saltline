@@ -7,6 +7,7 @@ import { groundShowcaseModule } from "../world/ground/ground.js";
 import { effectsShowcaseModule } from "../effects/effects.js";
 import { weaponShowcaseModule } from "../weapons/weapon.js";
 import { enemiesShowcaseModule } from "../enemies/enemies.js";
+import { environmentShowcaseModule } from "../core/environment.js";
 
 var SHOWCASE_MODULES = {
   mats: materialsShowcaseModule,
@@ -18,6 +19,8 @@ var SHOWCASE_MODULES = {
   enemies: enemiesShowcaseModule,
   props: propsShowcaseModule,
   render: rendererShowcaseModule,
+  // M5：时间/天气/直升机/闪电切换展示
+  environment: environmentShowcaseModule,
 };
 
 export { SHOWCASE_MODULES };
