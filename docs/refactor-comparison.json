@@ -1,0 +1,19 @@
+{
+  "camera": true,
+  "errors": true,
+  "geometries": true,
+  "geometryHash": true,
+  "materialHash": true,
+  "materials": true,
+  "objectives": true,
+  "player": true,
+  "quality": true,
+  "ready": true,
+  "sceneHash": true,
+  "sceneNodes": true,
+  "state": true,
+  "three": true,
+  "time": true,
+  "viewport": true,
+  "weapon": true
+}

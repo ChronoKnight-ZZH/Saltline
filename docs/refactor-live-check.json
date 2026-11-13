@@ -1,0 +1,56 @@
+{
+  "before": {
+    "state": "playing",
+    "pos": [
+      -32,
+      0,
+      6
+    ],
+    "yaw": -1.5707963267948966,
+    "ammo": 30,
+    "reserve": 150,
+    "health": 100,
+    "errors": []
+  },
+  "afterFiring": {
+    "state": "playing",
+    "pos": [
+      -29.256666439898506,
+      0,
+      6
+    ],
+    "yaw": -2.429183112424163,
+    "ammo": 23,
+    "reserve": 150,
+    "health": 100,
+    "audioContext": "running",
+    "errors": []
+  },
+  "afterReloadAndPause": {
+    "state": "paused",
+    "ammo": 30,
+    "reserve": 143,
+    "weaponState": "idle",
+    "errors": []
+  },
+  "resumed": {
+    "ready": true,
+    "state": "playing",
+    "ammo": 30,
+    "reserve": 143,
+    "audioContext": "running",
+    "errors": [],
+    "resources": [
+      "http://127.0.0.1:4173/assets/index-BrSNcoW5.css",
+      "http://127.0.0.1:4173/assets/index-Cl0SInxA.js",
+      "http://127.0.0.1:4173/fonts/-F63fjptAgt5VM-kVkqdyU8n1i8q131nj-o.woff2",
+      "http://127.0.0.1:4173/fonts/fC1_PZJEZG-e9gHhdI4-NBbfd2ys3SjJCx1czNDuDJAM2w.woff2",
+      "http://127.0.0.1:4173/fonts/-F6qfjptAgt5VM-kVkqdyU8n3twJwlBFgsAXHNk.woff2",
+      "http://127.0.0.1:4173/fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3bWuYMBYro.woff2",
+      "http://127.0.0.1:4173/fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6xHT2lv0tKk.woff2",
+      "http://127.0.0.1:4173/fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3bWuYMBYro.woff2"
+    ]
+  },
+  "controlsPanelOpened": true,
+  "settingsPanelOpened": true
+}

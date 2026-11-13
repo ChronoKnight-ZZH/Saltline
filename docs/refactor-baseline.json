@@ -1,0 +1,72 @@
+{
+  "camera": {
+    "fov": 74,
+    "pos": [
+      -32,
+      1.68,
+      6
+    ],
+    "quaternion": [
+      0,
+      -0.7071067811865475,
+      0,
+      0.7071067811865476
+    ]
+  },
+  "errors": [],
+  "geometries": 206,
+  "geometryHash": "f4d9ece39ea5679d1b99c180ad545cdcb708d18df7b7f68db2f79731549d2ddb",
+  "materialHash": "eacc45a7b0f12fdaf80d747f18944c7d05f868bec5d82e32695ffc7c8d753e21",
+  "materials": 178,
+  "objectives": [
+    {
+      "id": "relay_a",
+      "pos": [
+        1.5,
+        0,
+        7.5
+      ]
+    },
+    {
+      "id": "relay_b",
+      "pos": [
+        -2,
+        0.03,
+        -19.5
+      ]
+    },
+    {
+      "id": "relay_c",
+      "pos": [
+        23,
+        0,
+        0
+      ]
+    }
+  ],
+  "player": {
+    "health": 100,
+    "pos": [
+      -32,
+      0,
+      6
+    ]
+  },
+  "quality": "test",
+  "ready": true,
+  "sceneHash": "9d14954e53ebb76f344ed1eabfe905c3d8d819bcc602202dbed6dc91c91f75dd",
+  "sceneNodes": 579,
+  "state": "playing",
+  "three": "180",
+  "time": 0,
+  "viewport": [
+    960,
+    640
+  ],
+  "weapon": {
+    "ammo": 30,
+    "damage": 26,
+    "reserve": 150,
+    "rpm": 720
+  }
+}

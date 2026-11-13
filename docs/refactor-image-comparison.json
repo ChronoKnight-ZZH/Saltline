@@ -1,0 +1,22 @@
+{
+  "dimensions": [
+    960,
+    640
+  ],
+  "jpegBytesIdentical": false,
+  "meanAbsoluteChannelDifference": [
+    0.007722981770833333,
+    0.0074609375,
+    0.009529622395833333
+  ],
+  "rmsChannelDifference": [
+    0.12418353143298295,
+    0.11730202736952162,
+    0.14545523903421287
+  ],
+  "maxChannelDifference": [
+    9,
+    9,
+    9
+  ]
+}

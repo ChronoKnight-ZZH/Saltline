@@ -1,0 +1,19 @@
+{
+  "title": "Saltline",
+  "sourceUrl": "https://claude.ai/artifact/BGY1SztrAYcJQHSsnHHGmp",
+  "frameId": "5326a6ff-d95f-4e59-9b2e-b3f3bcb780e3",
+  "publishedVersion": "1794242702-61c7",
+  "downloadUrl": "https://5326a6ff-d95f-4e59-9b2e-b3f3bcb780e3.frame.claudeusercontent.com/_f/1794242702-61c7/?__frame_v=manifest.50700ebc68dce463.json",
+  "savedDate": "2026-11-10",
+  "originalFile": {
+    "path": "archive/original.html",
+    "bytes": 1423413,
+    "sha256": "f7081ef7b2fde5880e3c58184c720b2aa3b9115efe58ff71b48f6820d4f16f90"
+  },
+  "recoveryNotes": [
+    "The public version manifest exposes one index.html file only; no unbundled source files or source map were supplied.",
+    "Removed only the 40960-byte Claude frame runtime wrapper before verifying the original file against the published manifest.",
+    "Development sources are extracted from the verified published HTML. The bundled Three.js r180 runtime stays at its original version.",
+    "Game geometry, textures, effects and audio are generated procedurally by the game; only the external Google Fonts stylesheet and font binaries need local copies."
+  ]
+}

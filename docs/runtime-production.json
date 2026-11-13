@@ -1,0 +1,70 @@
+{
+  "ready": true,
+  "fatal": null,
+  "errors": [],
+  "stats": {
+    "calls": 319,
+    "tris": 2695054,
+    "geos": 181,
+    "tex": 137,
+    "programs": 107,
+    "res": [
+      1536,
+      864
+    ],
+    "scale": 0.6,
+    "advanced": true,
+    "softShadows": true,
+    "fps": 54.6,
+    "state": "title"
+  },
+  "three": "180",
+  "fonts": [
+    {
+      "font": "900 48px Big Shoulders Display",
+      "loaded": true
+    },
+    {
+      "font": "500 14px IBM Plex Mono",
+      "loaded": true
+    },
+    {
+      "font": "600 18px Barlow Condensed",
+      "loaded": true
+    }
+  ],
+  "resources": [
+    {
+      "url": "http://127.0.0.1:4173/assets/index-hSHwk0K9.js",
+      "durationMs": 148
+    },
+    {
+      "url": "http://127.0.0.1:4173/assets/index-BrSNcoW5.css",
+      "durationMs": 52
+    },
+    {
+      "url": "http://127.0.0.1:4173/fonts/-F63fjptAgt5VM-kVkqdyU8n1i8q131nj-o.woff2",
+      "durationMs": 33
+    },
+    {
+      "url": "http://127.0.0.1:4173/fonts/fC1_PZJEZG-e9gHhdI4-NBbfd2ys3SjJCx1czNDuDJAM2w.woff2",
+      "durationMs": 33
+    },
+    {
+      "url": "http://127.0.0.1:4173/fonts/-F6qfjptAgt5VM-kVkqdyU8n3twJwlBFgsAXHNk.woff2",
+      "durationMs": 40
+    },
+    {
+      "url": "http://127.0.0.1:4173/fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3bWuYMBYro.woff2",
+      "durationMs": 42
+    },
+    {
+      "url": "http://127.0.0.1:4173/fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6xHT2lv0tKk.woff2",
+      "durationMs": 10
+    },
+    {
+      "url": "http://127.0.0.1:4173/fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3bWuYMBYro.woff2",
+      "durationMs": 11
+    }
+  ]
+}

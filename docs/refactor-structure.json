@@ -1,0 +1,270 @@
+{
+  "originalStatements": 2069,
+  "modules": [
+    {
+      "file": "vendor/three-r180.js",
+      "statements": 1139
+    },
+    {
+      "file": "core/config.js",
+      "statements": 7
+    },
+    {
+      "file": "core/quality.js",
+      "statements": 1
+    },
+    {
+      "file": "core/events.js",
+      "statements": 1
+    },
+    {
+      "file": "core/random.js",
+      "statements": 1
+    },
+    {
+      "file": "core/math.js",
+      "statements": 5
+    },
+    {
+      "file": "core/fallbacks.js",
+      "statements": 2
+    },
+    {
+      "file": "core/geometry.js",
+      "statements": 17
+    },
+    {
+      "file": "render/renderer.js",
+      "statements": 6
+    },
+    {
+      "file": "render/sky.js",
+      "statements": 8
+    },
+    {
+      "file": "render/shadows.js",
+      "statements": 6
+    },
+    {
+      "file": "render/postprocessing.js",
+      "statements": 21
+    },
+    {
+      "file": "render/materials/materials.js",
+      "statements": 4
+    },
+    {
+      "file": "render/materials/surface-shaders.js",
+      "statements": 32
+    },
+    {
+      "file": "render/materials/textures.js",
+      "statements": 16
+    },
+    {
+      "file": "render/materials/catalog.js",
+      "statements": 24
+    },
+    {
+      "file": "render/materials/showcase.js",
+      "statements": 4
+    },
+    {
+      "file": "world/physics.js",
+      "statements": 11
+    },
+    {
+      "file": "world/props/props.js",
+      "statements": 4
+    },
+    {
+      "file": "world/props/registry.js",
+      "statements": 3
+    },
+    {
+      "file": "world/props/geometry.js",
+      "statements": 44
+    },
+    {
+      "file": "world/props/basic-builders.js",
+      "statements": 29
+    },
+    {
+      "file": "world/props/register.js",
+      "statements": 18
+    },
+    {
+      "file": "world/props/detail-geometry.js",
+      "statements": 41
+    },
+    {
+      "file": "world/props/detailed-builders.js",
+      "statements": 16
+    },
+    {
+      "file": "world/props/character-builders.js",
+      "statements": 9
+    },
+    {
+      "file": "world/props/cargo-builders.js",
+      "statements": 12
+    },
+    {
+      "file": "world/level/level.js",
+      "statements": 6
+    },
+    {
+      "file": "world/level/buildings.js",
+      "statements": 12
+    },
+    {
+      "file": "world/level/placement.js",
+      "statements": 20
+    },
+    {
+      "file": "world/backdrop/backdrop.js",
+      "statements": 6
+    },
+    {
+      "file": "world/backdrop/geometry.js",
+      "statements": 25
+    },
+    {
+      "file": "world/backdrop/cranes.js",
+      "statements": 15
+    },
+    {
+      "file": "world/backdrop/ships.js",
+      "statements": 20
+    },
+    {
+      "file": "world/backdrop/sky.js",
+      "statements": 8
+    },
+    {
+      "file": "world/ground/ground.js",
+      "statements": 4
+    },
+    {
+      "file": "world/ground/geometry.js",
+      "statements": 17
+    },
+    {
+      "file": "world/ground/asphalt.js",
+      "statements": 5
+    },
+    {
+      "file": "world/ground/water.js",
+      "statements": 20
+    },
+    {
+      "file": "effects/effects.js",
+      "statements": 20
+    },
+    {
+      "file": "effects/particles.js",
+      "statements": 37
+    },
+    {
+      "file": "effects/pools.js",
+      "statements": 12
+    },
+    {
+      "file": "audio/synthesis.js",
+      "statements": 77
+    },
+    {
+      "file": "audio/music.js",
+      "statements": 17
+    },
+    {
+      "file": "audio/library.js",
+      "statements": 6
+    },
+    {
+      "file": "audio/audio.js",
+      "statements": 13
+    },
+    {
+      "file": "input/input.js",
+      "statements": 8
+    },
+    {
+      "file": "player/player.js",
+      "statements": 3
+    },
+    {
+      "file": "combat/combat.js",
+      "statements": 3
+    },
+    {
+      "file": "weapons/weapon.js",
+      "statements": 21
+    },
+    {
+      "file": "weapons/geometry.js",
+      "statements": 19
+    },
+    {
+      "file": "weapons/rig.js",
+      "statements": 63
+    },
+    {
+      "file": "enemies/enemies.js",
+      "statements": 20
+    },
+    {
+      "file": "enemies/models.js",
+      "statements": 36
+    },
+    {
+      "file": "enemies/walker.js",
+      "statements": 15
+    },
+    {
+      "file": "enemies/drone.js",
+      "statements": 23
+    },
+    {
+      "file": "ui/hud.js",
+      "statements": 7
+    },
+    {
+      "file": "ui/menus.js",
+      "statements": 8
+    },
+    {
+      "file": "game/flow.js",
+      "statements": 4
+    },
+    {
+      "file": "app/showcases.js",
+      "statements": 1
+    },
+    {
+      "file": "app/diagnostics.js",
+      "statements": 7
+    },
+    {
+      "file": "app/boot-screen.js",
+      "statements": 5
+    },
+    {
+      "file": "app/runtime.js",
+      "statements": 1
+    },
+    {
+      "file": "app/benchmark.js",
+      "statements": 1
+    },
+    {
+      "file": "app/showcase-stubs.js",
+      "statements": 2
+    },
+    {
+      "file": "game.js",
+      "statements": 1
+    }
+  ],
+  "result": "equivalent after module boundaries and scoped identifier renaming"
+}
