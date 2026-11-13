@@ -1,7 +1,7 @@
 // 非制导导弹飞行体：从发射点飞向【发射瞬间锁定的地面点】，不做追踪。
 // 玩家反制 = 看见烟迹后跑出落点。落地回调负责爆炸（fx.explosion + combat.explode）。
 import { Vector3 } from "../vendor/three-r180.js";
-import { buildMissileMesh } from "./heli-model.js";
+import { buildMissileMesh } from "./apache-model.js";
 
 var UP = new Vector3(0, 1, 0);
 

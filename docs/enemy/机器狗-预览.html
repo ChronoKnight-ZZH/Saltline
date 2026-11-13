@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>四足机器狗 · 模型预览</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1114; }
+  canvas { display: block; }
+
+  #title {
+    position: fixed; left: 20px; top: 18px; color: #e6ebf0;
+    font: 600 15px/1.4 system-ui, -apple-system, "PingFang SC", sans-serif;
+    letter-spacing: .06em; pointer-events: none;
+    text-shadow: 0 1px 8px rgba(0,0,0,.8);
+  }
+  #title small {
+    display: block; margin-top: 4px; color: #8d98a4; font-weight: 400;
+    letter-spacing: .02em; font-size: 12px;
+  }
+  #hint {
+    position: fixed; left: 20px; bottom: 16px; color: #96a0ab;
+    font: 12px/1.7 system-ui, -apple-system, "PingFang SC", sans-serif;
+    pointer-events: none; text-shadow: 0 1px 6px rgba(0,0,0,.8);
+  }
+  #hint b { color: #cfd8e2; font-weight: 500; }
+  #legend {
+    position: fixed; right: 20px; bottom: 16px; color: #96a0ab;
+    font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-align: right; pointer-events: none; text-shadow: 0 1px 6px rgba(0,0,0,.8);
+  }
+</style>
+</head>
+<body>
+<div id="title">WALKER-04<small>四足机器狗 · 骨骼化模型预览</small></div>
+<div id="hint">
+  <b>拖拽</b> 旋转 · <b>滚轮</b> 缩放 · <b>右键</b> 平移<br />
+  <b>空格</b> 行走 / 待机 · <b>G</b> 步态速度
+</div>
+<div id="legend">
+  meshes — <span id="stat-mesh">—</span><br />
+  bones — <span id="stat-bone">—</span>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+/* ===================== 模型核心 ===================== */
+/* ============================================================
+ * 机器狗模型核心（把 minified 源码还原为可读实现）
+ * 依赖：全局 THREE
+ * ============================================================ */
+
+const va = Math.PI / 2;
+
+/* ---------- 几何/材质辅助函数（还原 minified 原名） ---------- */
+function Ce(geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, s = null) {
+  if (s) geo.scale(s[0], s[1], s[2]);
+  if (rx) geo.rotateX(rx);
+  if (ry) geo.rotateY(ry);
+  if (rz) geo.rotateZ(rz);
+  geo.translate(x, y, z);
+  return geo;
+}
+
+/** 倒角盒（用 BoxGeometry 近似） */
+function ft(w, h, d, bevel = 0.01, anchor = "center") {
+  const g = new THREE.BoxGeometry(w, h, d);
+  if (anchor === "bottom") g.translate(0, h / 2, 0);
+  return g;
+}
+
+/** 圆柱/圆台 */
+function ds(rTop, rBottom, h, seg = 12) {
+  return new THREE.CylinderGeometry(rTop, rBottom, h, seg);
+}
+
+/** 普通圆柱 */
+function Si(r1, r2, h, seg = 10) {
+  return new THREE.CylinderGeometry(r1, r2, h, seg);
+}
+
+/** 沿 X 轴的圆管/圆环（外径、内径、长度） */
+function Ro(outer, inner, length, seg = 8) {
+  const shape = new THREE.Shape();
+  shape.absarc(0, 0, outer, 0, Math.PI * 2, false);
+  if (inner > 0) {
+    const hole = new THREE.Path();
+    hole.absarc(0, 0, inner, 0, Math.PI * 2, true);
+    shape.holes.push(hole);
+  }
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth: length,
+    bevelEnabled: false,
+    curveSegments: seg,
+  });
+  g.translate(0, 0, -length / 2);
+  g.rotateY(Math.PI / 2);
+  return g;
+}
+
+/** 椭球：半径 + 分段 + 三轴缩放 */
+function Ur(r, wSeg = 16, hSeg = 10, sx = 1, sy = 1, sz = 1) {
+  const g = new THREE.SphereGeometry(1, wSeg, hSeg);
+  g.scale(r * sx, r * sy, r * sz);
+  return g;
+}
+
+/** 锥形杆：从 a 到 b，半径 r1→r2 */
+function su(a, b, r1, r2, seg = 8) {
+  const A = new THREE.Vector3(...a);
+  const B = new THREE.Vector3(...b);
+  const dir = B.clone().sub(A);
+  const len = dir.length();
+  const g = new THREE.CylinderGeometry(r2, r1, len, seg, 1, false);
+  g.translate(0, len / 2, 0);
+  const q = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    dir.clone().normalize()
+  );
+  g.applyQuaternion(q);
+  g.translate(A.x, A.y, A.z);
+  return g;
+}
+
+/** 铆钉（沿 Y 的短圆柱） */
+function Yv(x, y, z) {
+  const g = new THREE.CylinderGeometry(0.007, 0.007, 0.008, 6);
+  g.translate(x, y, z);
+  return g;
+}
+
+/** 螺栓（沿 X 的短圆柱） */
+function $_(x, y, z) {
+  const g = new THREE.CylinderGeometry(0.0075, 0.0075, 0.014, 6);
+  g.rotateZ(Math.PI / 2);
+  g.translate(x, y, z);
+  return g;
+}
+
+/** 螺栓（沿 Z 的短圆柱） */
+function kC(x, y, z) {
+  const g = new THREE.CylinderGeometry(0.009, 0.009, 0.012, 6);
+  g.rotateX(Math.PI / 2);
+  g.translate(x, y, z);
+  return g;
+}
+
+/** 管线：点位数组 → 平滑管。签名 (points, radius, radialSegments) */
+function tubeGeometry(points, radius, radialSegments = 6) {
+  const curve = new THREE.CatmullRomCurve3(
+    points.map((p) => new THREE.Vector3(p[0], p[1], p[2]))
+  );
+  const tubularSegments = Math.max(24, (points.length - 1) * 16);
+  return new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, false);
+}
+
+/* ---------- 材质 ---------- */
+const Ss = new THREE.MeshStandardMaterial({ color: 0x9aa4ae, roughness: 0.5, metalness: 0.2 });
+const vm = new THREE.MeshStandardMaterial({ color: 0x6b7581, roughness: 0.55, metalness: 0.25 });
+const Ts = new THREE.MeshStandardMaterial({ color: 0x4b525a, roughness: 0.6, metalness: 0.3 });
+const s0 = new THREE.MeshStandardMaterial({ color: 0x373d44, roughness: 0.65, metalness: 0.3 });
+const Of = new THREE.MeshStandardMaterial({ color: 0xb0834a, roughness: 0.6, metalness: 0.2 });
+const an = new THREE.MeshStandardMaterial({ color: 0x2b3036, roughness: 0.45, metalness: 0.85 });
+const As = new THREE.MeshStandardMaterial({ color: 0x23272c, roughness: 0.55, metalness: 0.7 });
+const Yn = new THREE.MeshStandardMaterial({ color: 0x6b7480, roughness: 0.35, metalness: 0.9 });
+const ga = new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.85, metalness: 0.1 });
+const IC = new THREE.MeshStandardMaterial({ color: 0x9aa2ab, roughness: 0.3, metalness: 0.95 });
+const zC = new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.2, metalness: 0.5 });
+
+const MAT = { Ss, vm, Ts, s0, Of, an, As, Yn, ga, IC, zC };
+
+/* 兼容源码里直接传 [r,g,b] 的写法 */
+function resolveMaterial(mat) {
+  if (Array.isArray(mat)) {
+    const [r, g, b] = mat;
+    return new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b) });
+  }
+  return mat;
+}
+
+/* ---------- 骨架构建器（还原 iu） ---------- */
+class iu {
+  constructor() {
+    this.root = new THREE.Group();
+    this.bones = new Map();
+  }
+  bone(name, parent, x, y, z) {
+    const obj = new THREE.Group();
+    obj.name = name;
+    obj.position.set(x, y, z);
+    if (parent) this.bones.get(parent).add(obj);
+    else this.root.add(obj);
+    this.bones.set(name, obj);
+    return obj;
+  }
+  add(matName, boneName, geo, mat, cast = true) {
+    const m = new THREE.Mesh(geo, resolveMaterial(mat));
+    m.castShadow = cast;
+    m.receiveShadow = false;
+    this.bones.get(boneName).add(m);
+    return m;
+  }
+  build() {
+    this.root.traverse((o) => {
+      if (o.isMesh) o.frustumCulled = false;
+    });
+    this.root.bones = this.bones;
+    return this.root;
+  }
+}
+
+/* ---------- 模型参数 $v（按几何约束推算） ---------- */
+const $v = {
+  stand: 0.66,          // body 骨骼高度 = L1 + L2，让脚底刚好落在 y=0
+  hipX: 0.155,
+  hipY: 0,
+  hipZ: 0.30,
+  l0: 0.045,
+  L1: 0.34,             // 大腿长
+  L2: 0.32,             // 小腿长
+  footR: 0.058,
+  legs: ["FL", "FR", "BL", "BR"],
+  side: [1, -1, 1, -1],
+  fore: [1, 1, -1, -1],
+};
+
+/* ============================================================
+ * createWalkerModel —— 源码移植
+ * ============================================================ */
+function createWalkerModel() {
+  let i = $v,
+    e = new iu();
+  (e.bone("root", null, 0, 0, 0),
+    e.bone("body", "root", 0, i.stand, 0),
+    e.bone("neck", "body", 0, 0.06, 0.49),
+    e.bone("head", "neck", 0, 0.13, 0.12),
+    e.bone("turret", "body", 0, 0.152, -0.03),
+    e.bone("gun", "turret", 0, 0.095, 0.02),
+    e.bone("antenna", "body", -0.105, 0.15, -0.46),
+    e.bone("beacon", "body", 0.105, 0.2, -0.455));
+  for (let n = 0; n < 4; n++) {
+    let s = i.legs[n],
+      o = i.side[n];
+    (e.bone("abd" + s, "body", o * i.hipX, i.hipY, i.fore[n] * i.hipZ),
+      e.bone("thigh" + s, "abd" + s, o * i.l0, 0, 0),
+      e.bone("shin" + s, "thigh" + s, 0, -i.L1, 0));
+  }
+  let t = (n, s, o, r, a) => e.add(n, s, o, r, a);
+  (t("metal", "body", Ce(ft(0.27, 0.2, 0.98, 0.02), 0, -0.01, 0), an),
+    t("shell", "body", Ce(ft(0.35, 0.05, 0.3, 0.014), 0, 0.125, 0.33), Ss),
+    t("shell", "body", Ce(ft(0.35, 0.05, 0.36, 0.014), 0, 0.125, -0.012), Ss),
+    t("shell", "body", Ce(ft(0.1, 0.052, 0.36, 0.01), 0, 0.126, -0.012 + 0), vm));
+  for (let n of [-0.15, 0.15])
+    for (let s of [0.21, 0.45, -0.17, 0.145])
+      t("metal", "body", Yv(n, 0.152, s), Yn);
+  t("metal", "body", Ce(ft(0.31, 0.03, 0.25, 0.006), 0, 0.112, -0.335), As);
+  for (let n = 0; n < 10; n++)
+    t("metal", "body", Ce(ft(0.007, 0.062, 0.225, 0.002), -0.126 + n * 0.028, 0.155, -0.335), Yn);
+  (t("metal", "body", Ce(ft(0.3, 0.012, 0.02, 0.003), 0, 0.186, -0.24), an),
+    t("metal", "body", Ce(ft(0.3, 0.012, 0.02, 0.003), 0, 0.186, -0.43), an));
+  for (let n of [1, -1]) {
+    (t("shell", "body", Ce(ft(0.032, 0.15, 0.31, 0.012), n * 0.15, 0.022, -0.075), Ss),
+      t("shell", "body", Ce(ft(0.032, 0.15, 0.135, 0.012), n * 0.15, 0.022, 0.1625), vm),
+      t("metal", "body", tubeGeometry([
+        [n * 0.168, 0.06, 0.125],
+        [n * 0.182, 0.06, 0.135],
+        [n * 0.182, 0.06, 0.19],
+        [n * 0.168, 0.06, 0.2],
+      ], 0.005, 5), Yn),
+      t("shell", "body", Ce(ft(0.034, 0.016, 0.135, 0.004), n * 0.151, -0.035, 0.1625), Of),
+      t("shell", "body", Ce(ft(0.034, 0.042, 0.46, 0.008), n * 0.151, -0.078, 0), Ts),
+      t("shell", "body", Ce(ft(0.028, 0.1, 0.11, 0.008), n * 0.146, 0.01, 0.305), s0));
+    for (let s = 0; s < 4; s++)
+      t("metal", "body", Ce(ft(0.004, 0.012, 0.085, 0.001), n * 0.161, -0.02 + s * 0.022, 0.305), an);
+    for (let s of [-0.035, 0.08])
+      for (let o of [-0.21, 0.06, 0.115, 0.21])
+        t("metal", "body", $_(n * 0.167, s, o), Yn);
+    t("metal", "body", tubeGeometry([
+      [n * 0.135, 0.148, -0.19],
+      [n * 0.135, 0.205, -0.16],
+      [n * 0.135, 0.212, 0],
+      [n * 0.135, 0.205, 0.43],
+      [n * 0.135, 0.148, 0.465],
+    ], 0.0105, 6), Yn);
+    for (let s of [0, 0.26])
+      t("metal", "body", Ce(ds(0.008, 0.008, 0.06, 6), n * 0.135, 0.178, s), Yn);
+    (t("shell", "body", tubeGeometry([
+      [n * 0.118, -0.105, -0.36],
+      [n * 0.132, -0.118, -0.2],
+      [n * 0.13, -0.112, 0.1],
+      [n * 0.118, -0.1, 0.36],
+    ], 0.009, 5), ga),
+      t("metal", "body",
+        Ce(new THREE.TorusGeometry(0.02, 0.005, 5, 10), n * 0.17, 0.085, -0.335, 0, va, 0), Yn));
+  }
+  (t("shell", "body", Ce(ft(0.3, 0.15, 0.075, 0.018), 0, -0.005, 0.505), Ts),
+    t("shell", "body", Ce(ft(0.2, 0.07, 0.02, 0.006), 0, 0.012, 0.545), s0));
+  for (let n = 0; n < 6; n++)
+    t("shell", "body",
+      Ce(ft(0.05, 0.034, 0.014, 0.003), -0.125 + n * 0.05, -0.098, 0.538, 0, 0, 0),
+      n % 2 ? s0 : Of);
+  for (let n of [-0.115, 0.115])
+    (t("metal", "body", Ce(Si(0.021, 0.021, 0.014, 10), n, 0.012, 0.547), an),
+      t("glow", "body", Ce(Si(0.015, 0.015, 0.004, 10), n, 0.012, 0.556), [6.5, 4.6, 2.2], false));
+  (t("metal", "body", Ce(ft(0.24, 0.095, 0.56, 0.02), 0, -0.145, 0), As),
+    t("shell", "body", Ce(ft(0.246, 0.03, 0.09, 0.006), 0, -0.14, 0.12), Ts),
+    t("shell", "body", Ce(ft(0.246, 0.03, 0.09, 0.006), 0, -0.14, -0.12), Ts),
+    t("shell", "body", Ce(ft(0.29, 0.15, 0.05, 0.014), 0, 0, -0.495), Ss),
+    t("shell", "body", Ce(ft(0.17, 0.05, 0.012, 0.004), 0, 0.03, -0.523), s0),
+    t("glow", "body", Ce(ft(0.13, 0.012, 0.004, 0.001), 0, 0.03, -0.531), [5, 0.3, 0.1], false),
+    t("metal", "body", Ce(Si(0.022, 0.022, 0.02, 10), 0.085, -0.035, -0.525), Yn),
+    t("metal", "body", Ce(new THREE.TorusGeometry(0.024, 0.006, 5, 10), -0.07, -0.05, -0.528, va, 0, 0), Yn));
+  for (let n of [-0.125, 0.125])
+    for (let s of [-0.055, 0.055]) t("metal", "body", kC(n, s, -0.523), Yn);
+  (t("shell", "body", tubeGeometry([
+    [0.09, 0.15, -0.2],
+    [0.13, 0.2, -0.16],
+    [0.12, 0.2, -0.08],
+    [0.09, 0.165, -0.05],
+  ], 0.009, 5), ga),
+    t("metal", "neck", su([0, -0.02, -0.02], [0, 0.11, 0.1], 0.045, 0.036, 10), an));
+  for (let n = 0; n < 3; n++) {
+    let s = 0.2 + n * 0.28;
+    t("shell", "neck",
+      su([0, -0.02 + 0.13 * s - 0.008, -0.02 + 0.12 * s - 0.0075],
+         [0, -0.02 + 0.13 * s + 0.008, -0.02 + 0.12 * s + 0.0075],
+         0.052, 0.052, 10), ga);
+  }
+  (t("shell", "neck", Ce(ft(0.13, 0.05, 0.1, 0.012), 0, -0.01, -0.03), Ss),
+    t("shell", "neck", tubeGeometry([
+      [0.05, -0.02, -0.04],
+      [0.07, 0.05, 0.02],
+      [0.06, 0.11, 0.07],
+      [0.045, 0.12, 0.1],
+    ], 0.007, 5), ga),
+    t("shell", "head", Ce(ft(0.19, 0.118, 0.25, 0.03), 0, 0, 0), Ss),
+    t("shell", "head", Ce(ft(0.168, 0.074, 0.03, 0.012), 0, -0.004, 0.118), s0),
+    t("lens", "head", Ce(ft(0.128, 0.024, 0.006, 0.002), 0, 0.006, 0.1345), [1, 1, 1], false));
+  for (let n of [-0.056, 0.056])
+    (t("metal", "head", Ce(Si(0.015, 0.015, 0.012, 10), n, -0.022, 0.132), an),
+      t("metal", "head", Ce(Si(0.009, 0.009, 0.004, 8), n, -0.022, 0.139), [0.1, 0.12, 0.2]));
+  (t("shell", "head", Ce(ft(0.062, 0.008, 0.2, 0.003), 0, 0.06, -0.005), Ts),
+    t("metal", "head", Ce(Ro(0.032, 0.032, 0.214, 12), 0, 0, -0.055), an));
+  for (let n of [1, -1])
+    t("shell", "head", Ce(Ro(0.022, 0.022, 0.006, 10), n * 0.108, 0, -0.055), Ts);
+  (t("metal", "head", Ce(ds(0.036, 0.036, 0.026, 14), 0, 0.072, -0.05), an),
+    t("metal", "head", Ce(ds(0.037, 0.037, 0.006, 14), 0, 0.074, -0.05), [0.2, 0.3, 0.5]),
+    t("metal", "head", Ce(ft(0.12, 0.03, 0.13, 0.008), 0, -0.068, 0.02), As));
+  for (let n of [-0.08, 0.08])
+    for (let s of [-0.09, 0.07]) t("metal", "head", Yv(n, 0.061, s), Yn);
+  (t("metal", "turret", Ce(ds(0.105, 0.118, 0.034, 18), 0, 0, 0), an),
+    t("metal", "turret", Ce(ft(0.18, 0.02, 0.16, 0.005), 0, 0.026, 0), As));
+  for (let n of [1, -1])
+    (t("shell", "turret", Ce(ft(0.028, 0.115, 0.15, 0.012), n * 0.078, 0.085, 0.005), Ss),
+      t("metal", "turret", Ce(Ro(0.022, 0.022, 0.008, 10), n * 0.094, 0.095, 0.02), Yn));
+  (t("shell", "gun", Ce(ft(0.108, 0.086, 0.21, 0.016), 0, 0, -0.012), Ss),
+    t("shell", "gun", Ce(ft(0.11, 0.02, 0.212, 0.006), 0, -0.022, -0.012), Ts),
+    t("metal", "gun", Ce(Si(0.035, 0.035, 0.11, 12), 0, 0, 0.145), an));
+  for (let n = 0; n < 4; n++)
+    t("metal", "gun", Ce(Si(0.039, 0.039, 0.008, 12), 0, 0, 0.105 + n * 0.026), As);
+  (t("metal", "gun", Ce(Si(0.022, 0.024, 0.3, 12), 0, 0, 0.25), As),
+    t("metal", "gun", Ce(Si(0.036, 0.036, 0.06, 10), 0, 0, 0.395), an),
+    t("metal", "gun", Ce(ft(0.08, 0.012, 0.025, 0.003), 0, 0, 0.395), [0.15, 0.15, 0.15]),
+    t("metal", "gun", Ce(Ro(0.056, 0.056, 0.06, 14), 0.084, -0.004, -0.045), an),
+    t("metal", "gun", Ce(Ro(0.02, 0.02, 0.066, 8), 0.084, -0.004, -0.045), zC),
+    t("metal", "gun", Ce(ft(0.036, 0.036, 0.095, 0.008), -0.03, 0.06, 0), an),
+    t("glow", "gun", Ce(Si(0.011, 0.011, 0.003, 8), -0.03, 0.06, 0.049), [1.6, 0.12, 0.05], false),
+    t("shell", "gun", tubeGeometry([
+      [0.05, -0.03, -0.11],
+      [0.06, -0.07, -0.13],
+      [0.04, -0.09, -0.1],
+    ], 0.008, 5), ga),
+    t("metal", "body", Ce(ds(0.022, 0.026, 0.05, 10), 0.105, 0.175, -0.455), an),
+    t("glow", "beacon", Ce(Ur(0.02, 10, 6, 1, 1.25, 1), 0, 0.012, 0), [14, 5.5, 0.5], false),
+    t("metal", "antenna", Ce(ds(0.011, 0.014, 0.05, 8), 0, 0.025, 0), an),
+    t("metal", "antenna", Ce(ds(0.0028, 0.005, 0.62, 5), 0, 0.36, 0), an),
+    t("shell", "antenna", Ce(Ur(0.009, 6, 4), 0, 0.67, 0), Ts));
+  for (let n = 0; n < 4; n++) {
+    let s = i.legs[n],
+      o = i.side[n],
+      r = "abd" + s,
+      a = "thigh" + s,
+      l = "shin" + s;
+    (t("metal", r, Ce(Si(0.06, 0.06, 0.17, 14), -o * 0.02, 0, 0), an),
+      t("shell", r, Ce(ft(0.11, 0.05, 0.155, 0.014), o * 0, 0.058, 0), Ss),
+      t("metal", r, Ce(Si(0.03, 0.03, 0.18, 8), -o * 0.02, 0, 0), Yn),
+      t("shell", a, Ce(Ro(0.078, 0.078, 0.07, 18), 0, 0, 0), Ss),
+      t("shell", a, Ce(Ro(0.081, 0.081, 0.016, 18), o * 0.012, 0, 0), Ts),
+      t("metal", a, Ce(Ro(0.048, 0.048, 0.082, 12), 0, 0, 0), an));
+    for (let c = 0; c < 5; c++) {
+      let u = c * 1.2566;
+      t("metal", a, $_(o * 0.039, Math.cos(u) * 0.062, Math.sin(u) * 0.062), Yn);
+    }
+    (t("shell", a, Ce(ft(0.062, i.L1 - 0.07, 0.1, 0.022), 0, -i.L1 * 0.5 - 0.005, 0.004), Ss),
+      t("metal", a, Ce(ft(0.044, i.L1 - 0.04, 0.06, 0.012), 0, -i.L1 * 0.5, -0.035), an),
+      t("shell", a, Ce(ft(0.065, 0.045, 0.103, 0.01), 0, -0.145, 0.004), Ts),
+      t("shell", a, Ce(ft(0.064, 0.012, 0.102, 0.004), 0, -0.26, 0.004), s0),
+      t("metal", a, su([0, -0.06, -0.082], [0, -i.L1 * 0.62, -0.078], 0.021, 0.021, 10), Yn),
+      t("metal", a, su([0, -i.L1 * 0.62, -0.078], [0, -i.L1 + 0.025, -0.058], 0.009, 0.009, 6), IC),
+      t("metal", a, Ce(ft(0.05, 0.03, 0.035, 0.006), 0, -0.055, -0.07), As),
+      t("shell", a, tubeGeometry([
+        [o * 0.036, -0.02, 0.05],
+        [o * 0.044, -0.13, 0.062],
+        [o * 0.042, -0.28, 0.058],
+        [o * 0.034, -i.L1 + 0.03, 0.035],
+      ], 0.0065, 5), ga),
+      t("metal", a, Ce(Ro(0.05, 0.05, 0.086, 14), 0, -i.L1, 0), an),
+      t("shell", a, Ce(Ro(0.036, 0.036, 0.092, 12), 0, -i.L1, 0), vm),
+      t("metal", l, Ce(ds(0.03, 0.021, i.L2 - 0.08, 10), 0, -(i.L2 - 0.08) / 2 - 0.01, 0), an),
+      t("shell", l, Ce(ft(0.052, 0.21, 0.04, 0.014), 0, -0.14, 0.02), Ss),
+      t("shell", l, Ce(ft(0.054, 0.02, 0.042, 0.006), 0, -0.215, 0.02), Ts),
+      t("metal", l, Ce(ft(0.03, 0.06, 0.05, 0.008), 0, -0.02, -0.03), As),
+      t("metal", l, Ce(ds(0.024, 0.03, 0.03, 10), 0, -i.L2 + 0.085, 0), Yn),
+      t("shell", l, Ce(Ur(i.footR + 0.002, 12, 8, 1, 0.86, 1.08), 0, -i.L2 + i.footR * 0.86, 0.004), ga));
+  }
+  return e.build(["shell", "metal", "glow", "lens"]);
+}
+/* ===================== 场景 ===================== */
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1114);
+scene.fog = new THREE.Fog(0x0e1114, 6, 22);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 100);
+camera.position.set(1.55, 1.05, 1.85);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.62, 0.02);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 0.7;
+controls.maxDistance = 6;
+controls.maxPolarAngle = Math.PI * 0.495;
+
+/* 灯光 */
+scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x1a1c20, 1.05));
+
+const sun = new THREE.DirectionalLight(0xfff4e6, 2.4);
+sun.position.set(2.6, 4.2, 2.2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -1.6;
+sun.shadow.camera.right = 1.6;
+sun.shadow.camera.top = 1.8;
+sun.shadow.camera.bottom = -1.2;
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 12;
+sun.shadow.bias = -0.0006;
+scene.add(sun);
+
+const rim = new THREE.DirectionalLight(0x7fa8ff, 1.1);
+rim.position.set(-3, 1.4, -2.6);
+scene.add(rim);
+
+const fill = new THREE.DirectionalLight(0xffd9b0, 0.5);
+fill.position.set(-1, 0.6, 2.4);
+scene.add(fill);
+
+/* 地面 */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(24, 24),
+  new THREE.MeshStandardMaterial({ color: 0x14171a, roughness: 0.95, metalness: 0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(8, 40, 0x3a4149, 0x23282e);
+grid.position.y = 0.001;
+scene.add(grid);
+
+/* ===================== 实例化 ===================== */
+const dog = createWalkerModel();
+scene.add(dog);
+
+document.getElementById("stat-mesh").textContent =
+  (() => { let c = 0; dog.traverse(o => { if (o.isMesh) c++; }); return c; })();
+document.getElementById("stat-bone").textContent = dog.bones.size;
+
+/* 骨骼引用 */
+const B = dog.bones;
+const legNames = ["FL", "FR", "BL", "BR"];
+const legs = legNames.map((n) => ({
+  abd: B.get("abd" + n),
+  thigh: B.get("thigh" + n),
+  shin: B.get("shin" + n),
+  // 对角小跑：FL+BR 同相，FR+BL 反相
+  phase: (n === "FL" || n === "BR") ? 0 : Math.PI,
+  side: (n === "FL" || n === "BL") ? 1 : -1,
+}));
+
+const bodyBone = B.get("body");
+const neck = B.get("neck");
+const head = B.get("head");
+const turret = B.get("turret");
+const gun = B.get("gun");
+const antenna = B.get("antenna");
+const beaconBone = B.get("beacon");
+
+/* 顶灯脉冲（拿到 beacon 下的发光球） */
+let beaconMesh = null;
+beaconBone.traverse((o) => { if (o.isMesh && !beaconMesh) beaconMesh = o; });
+const beaconLight = new THREE.PointLight(0xff8a2a, 2.2, 2.4, 2);
+beaconLight.position.set(0, 0.02, 0);
+beaconBone.add(beaconLight);
+
+/* ===================== 步态动画 ===================== */
+const state = {
+  walking: true,
+  speed: 1.0,      // 步频倍率
+  gaitTime: 0,
+  t: 0,
+};
+
+const clock = new THREE.Clock();
+const SWING = 0.30;   // 髋摆动幅度（弧度）
+const LIFT = 0.52;    // 抬腿时膝部弯曲幅度
+
+function animate() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  state.t += dt;
+
+  const moving = state.walking;
+  const cadence = moving ? 3.1 * state.speed : 1.0;
+  if (moving) state.gaitTime += dt * cadence;
+
+  const g = state.gaitTime;
+
+  /* --- 腿部：对角小跑 --- */
+  for (const leg of legs) {
+    if (!leg.abd) continue;
+
+    if (moving) {
+      const p = g + leg.phase;
+      const swing = Math.sin(p);
+      // 髋：前后摆
+      leg.abd.rotation.x = -SWING * swing;
+      // 膝：摆动相抬腿（sin(p) 上升段 → 屈膝）
+      const lift = Math.max(0, Math.sin(p + Math.PI * 0.5));
+      leg.shin.rotation.x = LIFT * lift * 0.9 + 0.12;
+      leg.thigh.rotation.x = -0.10 * Math.max(0, swing);
+      // 轻微外摆，避免机械感
+      leg.abd.rotation.z = leg.side * 0.02 * Math.sin(p * 2);
+    } else {
+      // 待机：回到站姿，带一点呼吸感
+      leg.abd.rotation.x += (0 - leg.abd.rotation.x) * Math.min(1, dt * 6);
+      leg.abd.rotation.z += (0 - leg.abd.rotation.z) * Math.min(1, dt * 6);
+      leg.shin.rotation.x += (0.10 - leg.shin.rotation.x) * Math.min(1, dt * 6);
+      leg.thigh.rotation.x += (0 - leg.thigh.rotation.x) * Math.min(1, dt * 6);
+    }
+  }
+
+  /* --- 机身起伏与俯仰 --- */
+  const bob = moving ? Math.sin(g * 2) * 0.008 : Math.sin(state.t * 1.1) * 0.003;
+  bodyBone.position.y = $v.stand + bob;
+  bodyBone.rotation.z = moving ? Math.sin(g) * 0.012 : 0;
+  bodyBone.rotation.x = moving ? Math.sin(g * 2 + 1) * 0.008 : 0;
+
+  /* --- 颈部/头部：环视 --- */
+  neck.rotation.y = Math.sin(state.t * 0.55) * 0.16;
+  head.rotation.x = Math.sin(state.t * 0.8 + 0.6) * 0.06 - 0.02;
+  head.rotation.z = Math.sin(state.t * 0.45) * 0.03;
+
+  /* --- 顶部武器站：扫描 --- */
+  turret.rotation.y = Math.sin(state.t * 0.42) * 0.55;
+  gun.rotation.x = -0.12 + Math.sin(state.t * 0.9) * 0.12;
+
+  /* --- 天线摇摆 --- */
+  antenna.rotation.z = Math.sin(state.t * 2.3) * 0.05 - 0.02;
+  antenna.rotation.x = Math.sin(state.t * 1.7 + 1) * 0.04;
+
+  /* --- 警示灯脉冲 --- */
+  const pulse = 0.55 + 0.45 * Math.pow(Math.max(0, Math.sin(state.t * 3.2)), 4);
+  if (beaconMesh) {
+    if (!beaconMesh.userData.baseColor) {
+      beaconMesh.userData.baseColor = beaconMesh.material.color.clone();
+    }
+    beaconMesh.material.color
+      .copy(beaconMesh.userData.baseColor)
+      .multiplyScalar(0.45 + pulse * 0.9);
+  }
+  beaconLight.intensity = 0.6 + pulse * 3.4;
+
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+
+/* ===================== 交互 ===================== */
+addEventListener("keydown", (e) => {
+  if (e.code === "Space") {
+    e.preventDefault();
+    state.walking = !state.walking;
+  }
+  if (e.key === "g" || e.key === "G") {
+    state.speed = state.speed >= 1.6 ? 0.6 : state.speed + 0.5;
+  }
+});
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* 便于控制台调试 */
+window.__dog = dog;
+window.__state = state;
+</script>
+</body>
+</html>

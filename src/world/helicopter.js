@@ -17,7 +17,9 @@ import { createRandom } from "../core/random.js";
 import { damp, clamp } from "../core/math.js";
 import { WORLD_BOUNDS } from "../core/config.js";
 import { HELICOPTER_TUNING, HELI_COMBAT } from "../core/environment-presets.js";
-import { buildHelicopter } from "./heli-model.js";
+// AH-64 阿帕奇模型（移植自 docs/阿帕奇武装直升机模型-升级版.html）。
+// 旧版 heli-model.js 保留为回退，两者接口一致。
+import { buildApache, buildHelicopterCompat } from "./apache-model.js";
 import { createMissile } from "./missile.js";
 
 var Y_AXIS = new Vector3(0, 1, 0);
@@ -300,13 +302,24 @@ function createHelicopter(context) {
   }
 
   // —— 战斗状态机（docs/直升机单位设计.md）——
+  // —— 模型 ——
   function ensureModel() {
     if (state.model || !context.scene) return;
     try {
-      state.model = buildHelicopter();
+      state.model = buildApache();
       context.scene.add(state.model.root);
     } catch (e) {
-      state.model = null;
+      console.error(
+        "[helicopter] apache model failed, using simple fallback: " +
+          (e && e.stack ? e.stack : e),
+      );
+      // 回退到旧简版模型，保证光柱/战斗逻辑不受影响
+      try {
+        state.model = buildHelicopterCompat();
+        context.scene.add(state.model.root);
+      } catch (e2) {
+        state.model = null;
+      }
     }
   }
 
@@ -318,6 +331,13 @@ function createHelicopter(context) {
     m.spin(dt, 18);
     // 巡逻时轻微前倾，锁定时俯身朝目标
     m.tilt(state.mode === "lock" ? 0.12 : 0.04, 0);
+    // 防撞灯闪烁（阿帕奇模型带独立 beacon/bellyBeacon）
+    if (m.beacon) {
+      let t = context.time ? context.time.t : 0;
+      let on = t % 1.1 < 0.12;
+      m.beacon.visible = on;
+      if (m.bellyBeacon) m.bellyBeacon.visible = on;
+    }
   }
 
   function playerGroundPoint(out) {

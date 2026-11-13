@@ -264,9 +264,12 @@ src/
 │     ├─ surface-shaders.js      # 程序化表面生成器 GLSL 与默认表面
 │     ├─ textures.js             # 法线/粗糙度烘焙、贴花、标签、编号纹理
 │     └─ showcase.js             # 材质展示场景
-├─ world/                        # 世界构建（23）
+├─ world/                        # 世界构建（24）
 │  ├─ physics.js                 # AABB 碰撞、射线、导航网格、胶囊移动
 │  ├─ helicopter.js              # 夜晴直升机光柱、音效、暴露扫描（M3）
+│  ├─ apache-model.js            # AH-64 阿帕奇程序化模型（机身/旋翼/短翼武器/起落架）
+│  ├─ heli-model.js              # 简版模型，仅作 apache-model 失败时的回退
+│  ├─ missile.js                 # 直升机对地导弹飞行体
 │  ├─ level/                     # 关卡（3）
 │  │  ├─ level.js                # 关卡装配、目标、出生点、撤离点
 │  │  ├─ buildings.js            # 静态建筑与道具放置工具
@@ -2167,7 +2170,9 @@ context.game.resume();
 | 路径 | 核心职责 | 依赖 | 主要对外接口 | 设计意图 |
 | --- | --- | --- | --- | --- |
 | `world/physics.js` | AABB 列表、射线、视线、地面高度、胶囊移动、导航网格与 A* | vendor、`core/config` | `createPhysics`、`cloneVector3` | 用轻量 AABB 替代完整物理引擎，保证确定性 |
-| `world/helicopter.js` | 夜晴直升机盘旋、光柱渲染（分级）、音效跟踪、暴露扫描 | vendor、`core/{random,math,config,environment-presets}` | `createHelicopter` | 产出 `helicopter:spot`；`enabled` 由 environment 控制（M3） |
+| `world/helicopter.js` | 夜晴直升机盘旋、光柱渲染（分级）、音效跟踪、暴露扫描 | vendor、`core/{random,math,config,environment-presets}`、`apache-model`、`missile` | `createHelicopter` | 产出 `helicopter:spot`；`enabled` 由 environment 控制（M3） |
+| `world/apache-model.js` | AH-64 程序化模型：机身/串列座舱/尾梁尾翼/主旋翼/尾桨/短翼武器/发动机/起落架 | vendor、`core/geometry` | `buildApache`、`buildMissileMesh` | 静态件按材质合批（46 mesh / 1.19 万三角）；`spin()`/`tilt()` 供 helicopter 驱动 |
+| `world/heli-model.js` | 简版通用直升机 | vendor、`core/geometry` | `buildHelicopter`、`buildMissileMesh` | 仅作 `apache-model` 构建失败时的回退 |
 | `world/level/level.js` | 关卡装配、中继目标、出生点、区域、室内盒、过场路径、静态合批 | vendor、`core/geometry`、`level/buildings`、`level/placement` | `createLevel`、`levelShowcaseModule`、`showcaseLevel` | 关卡数据与构建逻辑集中，便于调整布局 |
 | `world/level/buildings.js` | 建筑构建器与放置工具（盒/板/柱/杆/工字梁/楼梯/栈桥/堆叠） | vendor、`core/geometry` | `ob`、`rb`、`no`、`ab` | 提供“关卡 DSL”，让布局代码可读 |
 | `world/level/placement.js` | 线缆、地面标牌、楼梯、围栏、集装箱堆叠等摆件 | vendor、`core/geometry`、`level/buildings` | `Lr`、`lv`、`cb`、`ts`、`mt`、`hR`、`fR` | 把重复摆放模式抽成函数 |
