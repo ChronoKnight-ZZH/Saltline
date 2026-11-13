@@ -91,6 +91,17 @@ var FALLBACKS = {
     message: noop,
     hitmarker: noop,
   }),
+  // M4：闪电创建失败时静默降级；environment 检测不到 setEnabled 就跳过启停。
+  lightning: () => ({
+    stub: !0,
+    enabled: false,
+    nextT: 0,
+    flashes: 0,
+    setEnabled: noop,
+    update: noop,
+    trigger: noop,
+    debug: {},
+  }),
   // M3: 直升机创建失败时静默降级；environment 检测到 stub 也会跳过更新。
   helicopter: () => ({
     stub: !0,

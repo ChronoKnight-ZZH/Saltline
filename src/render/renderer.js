@@ -509,6 +509,9 @@ async function createRenderer(context) {
       addPrePass(ie) {
         H.push(ie);
       },
+      // M4：闪电全屏闪白峰值。postprocessing.js 已消费 post.flash
+      // （uFlash → col += vec3(1,0.97,0.9) * uFlash * 2.5），衰减在 frame() 内。
+      lightningPeak: 0.35,
       renderWorld(ie, F) {
         let X = n.getRenderTarget(),
           ne = n.shadowMap.needsUpdate,
@@ -604,6 +607,12 @@ async function createRenderer(context) {
         let F = performance.now();
         (D && z(F - D), (D = F), T++, n.info.reset(), x.update(ie));
         let X = context.time ? context.time.t : T / 60;
+        // M4：post.flash 衰减。原版只由 game flow 写 0（死亡/重开），
+        // lightning 写入后若不衰减会永久泛白，因此这里按 ~0.22s 半衰期收敛。
+        if (N.post.flash > 0) {
+          N.post.flash = N.post.flash * Math.exp(-3.2 * ie);
+          if (N.post.flash < 1e-3) N.post.flash = 0;
+        }
         ((u.material.uniforms.uTime.value = X),
           (w.t += ie),
           (w.value =
@@ -658,6 +667,17 @@ async function createRenderer(context) {
       },
     },
     Q = null;
+  // M4：订阅 lightning:flash → post.flash（全屏闪白）。
+  // 白天（payload.postFlash=false）与 low 画质（envFlash=false）跳过，
+  // 那时只有 thunder 链路驱动天空 uFlash。衰减在 frame() 内做。
+  context.events &&
+    context.events.on &&
+    context.events.on("lightning:flash", (ie) => {
+      if (!ie || !ie.postFlash) return;
+      if (context.quality && context.quality.envFlash === false) return;
+      let F = (Number(ie.intensity) || 1) * N.lightningPeak;
+      N.post.flash = Math.max(N.post.flash || 0, F);
+    });
   function K() {
     let ie = context.level && context.level.interiorBoxes;
     if (!ie || !ie.length) return;

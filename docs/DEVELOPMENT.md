@@ -14,6 +14,7 @@
 | `core/environment-presets.js` | `TIME_PRESETS`、`WEATHER_PRESETS`、`combine`、`LIGHTNING_TIMING`、`HELICOPTER_TUNING` |
 | `core/environment.js` | `createEnvironment`：时间/天气/能见度中枢，perception、visibility、set/randomize |
 | `world/helicopter.js` | `createHelicopter`（M3）：夜晴光柱、盘旋、音效、`isInBeam`、暴露扫描 |
+| `effects/lightning.js` | `createLightning`（M4）：闪电调度、`lightning:flash`/`thunder` 派发、能见度脉冲触发 |
 | `render/renderer.js` | `createRenderer`：场景、镜头、光照、resize、渲染通道 |
 | `render/sky.js`、`shadows.js`、`postprocessing.js` | 天空着色器、软阴影和后处理 |
 | `render/materials/` | `materials.js` 创建材质；`catalog.js` 定义材质数据；`surface-shaders.js` 和 `textures.js` 生成表面/纹理 |
@@ -73,9 +74,11 @@ window.__stats();  // 渲染统计、FPS、游戏状态
 window.__G;        // 运行中的游戏上下文
 ```
 
-`__G` 包含 `game`、`player`、`weapon`、`enemies`、`level`、`render`、`audio`、`physics`、`input`、`events`、`environment` 等对象。不要将它们作为新的持久存储格式。
+`__G` 包含 `game`、`player`、`weapon`、`enemies`、`level`、`render`、`audio`、`physics`、`input`、`events`、`environment`、`helicopter`、`lightning` 等对象。不要将它们作为新的持久存储格式。
 
-`window.__G.environment` 可用，含 `timeOfDay`、`weather`、`wetness`、`perception`、`visibility`、`set`、`randomize`。
+`window.__G.environment` 可用，含 `timeOfDay`、`weather`、`wetness`、`lampOn`、`perception`、`visibility`、`set`、`randomize`。
+
+`window.__G.lightning.trigger()` 可立即触发一次闪电（调试用），`window.__G.helicopter.setEnabled(true)` 可强制开光柱。
 
 ## 原版调试参数
 

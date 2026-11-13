@@ -440,6 +440,14 @@ body {
   margin: -1px 0 0 -1px;
   opacity: 0.85;
 }
+/* M4: lightning washes the crosshair edges white for a moment */
+.h-cross.flash i {
+  background: #fff;
+  filter: brightness(2.2);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 0 6px rgba(255, 252, 240, 0.9);
+}
 .h-hit {
   position: absolute;
   left: 50%;

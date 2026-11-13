@@ -5,6 +5,7 @@ import {
   TIME_PRESETS,
   WEATHER_PRESETS,
   DEFAULT_ENV,
+  LIGHTNING_TIMING,
   combine,
 } from "./environment-presets.js";
 
@@ -109,6 +110,13 @@ function createEnvironment(context) {
         context.helicopter.setEnabled(want);
       }
     }
+    // M4：闪电启停（同直升机模式，按 target.lightningEnabled 派生）
+    if (context.lightning && context.lightning.setEnabled) {
+      let want = !!state.target.lightningEnabled;
+      if (context.lightning.enabled !== want) {
+        context.lightning.setEnabled(want);
+      }
+    }
   }
 
   function pushFrame(dt) {
@@ -127,7 +135,8 @@ function createEnvironment(context) {
       visibility.lightningT -= dt;
       visibility.current = visibility.lightningPeak;
     } else {
-      visibility.current = damp(visibility.current, visibility.base, 3, dt);
+      // M4：lambda 3 → 5，与改造文档“0.8s 回落到 1/e”一致。
+      visibility.current = damp(visibility.current, visibility.base, 5, dt);
     }
 
     if (context.render && context.render.setFog) {
@@ -227,7 +236,47 @@ function createEnvironment(context) {
         );
       }
     }
-    // M4: context.lightning && context.lightning.update(dt);
+    // M4：驱动闪电（同样 try/catch 保护）
+    if (context.lightning && context.lightning.update) {
+      try {
+        context.lightning.update(dt);
+      } catch (e) {
+        console.error(
+          "[environment] lightning.update threw: " + (e && e.stack ? e.stack : e),
+        );
+      }
+    }
+  }
+
+  // M4：闪电瞬时暴露扫描。从玩家视角遍历敌人：距离粗筛 → LOS → forceExpose。
+  // 与 helicopter.scanAndExpose 对称；1.5s 冷却在 enemies 侧，两者共享。
+  function scanLightningExpose() {
+    if (!context.enemies || !context.enemies.list) return;
+    if (!context.enemies.forceExpose) return;
+    let p = context.player;
+    if (!p || p.alive === false) return;
+    let eye = p.eye || p.pos;
+    if (!eye) return;
+    let peak = visibility.lightningPeak,
+      peak2 = peak * peak,
+      exposedIds = [];
+    for (let enemy of context.enemies.list) {
+      if (!enemy || !enemy.alive || !enemy.active) continue;
+      // 已交战不降级（改造文档 4.5）
+      if (enemy.mode === "engage") continue;
+      let dx = enemy.pos.x - p.pos.x,
+        dy = enemy.pos.y - p.pos.y,
+        dz = enemy.pos.z - p.pos.z;
+      if (dx * dx + dy * dy + dz * dz > peak2) continue;
+      if (!context.physics.lineOfSight(enemy.sensor || enemy.pos, eye)) continue;
+      context.enemies.forceExpose(p.pos, "lightning", enemy);
+      if (enemy.id != null) exposedIds.push(enemy.id);
+    }
+    if (exposedIds.length && context.events && context.events.emit) {
+      context.events.emit("lightning:exposed", {
+        targets: exposedIds.map((id) => ({ id })),
+      });
+    }
   }
 
   let system = {
@@ -240,6 +289,10 @@ function createEnvironment(context) {
     get wetness() {
       return state.current.wetness;
     },
+    // M4：当前灯光强度（0..1）。lightning 用 >0.5 判定“夜晚”决定是否全屏 flash。
+    get lampOn() {
+      return state.target.lampOn;
+    },
     setTimeOfDay,
     setWeather,
     set,
@@ -250,7 +303,15 @@ function createEnvironment(context) {
     _applyStatic: applyStatic,
     _pushFrame: pushFrame,
     _onLightningFlash() {
-      // M4
+      // M4：能见度脉冲（方案 B：0.8s 高能 + 约 0.8s damp 回落）。
+      // 连续闪电取 max 不叠加：lightningT 不累加，current 不翻倍。
+      visibility.lightningT = Math.max(
+        visibility.lightningT,
+        LIGHTNING_TIMING.high,
+      );
+      visibility.current = Math.max(visibility.current, visibility.lightningPeak);
+      // 全场暴露扫描（9 敌人单帧完成，不分帧）
+      scanLightningExpose();
     },
     _updateHelicopter() {
       // M3

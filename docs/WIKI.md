@@ -151,6 +151,7 @@ context.time.dt = dt; context.time.t += dt; context.time.real = performance.now(
 | `weapon` | `WeaponSystem` | `createWeapon` | 武器状态与视图模型 |
 | `enemies` | `EnemySystem` | `createEnemies` | 敌人池、生成、射线检测 |
 | `helicopter` | `HelicopterSystem` | `createHelicopter` | 夜晴直升机光柱/音效/暴露扫描（M3），见 4.3.6 |
+| `lightning` | `LightningSystem` | `createLightning` | 雷暴闪电调度与视觉触发（M4），见 4.5.1 之后的 `createLightning` |
 | `environment` | `EnvironmentSystem` | `createEnvironment` | 时间/天气/能见度中枢，见 4.1.6 |
 | `hud` | `HUDSystem` | `createHUD` | DOM HUD |
 | `game` | `GameFlow` | `createGameFlow` | 任务状态机与菜单 |
@@ -305,8 +306,9 @@ src/
 │  ├─ models.js                  # 四足 Gull 与 Hound 骨骼/网格
 │  ├─ walker.js                  # Gull 行为
 │  └─ drone.js                   # Hound 行为
-├─ effects/                      # 特效（3）
+├─ effects/                      # 特效（4）
 │  ├─ effects.js                 # 特效系统与事件接线
+│  ├─ lightning.js               # 雷暴闪电调度与触发（M4）
 │  ├─ particles.js               # 粒子纹理、批次、材质
 │  └─ pools.js                   # 弹壳/碎屑/贴花复用池
 ├─ audio/                        # 音频（4）
@@ -485,7 +487,7 @@ src/
 关键调用链：
 
 1. **启动**：`game.js → register.js`（安装 builder）→ `diagnostics.js`（安装错误捕获）→ `runtime.startGame()`。
-2. **初始化**：`runtime → createRenderer → createMaterials → createPhysics/createProps/createInput → createLevel → createBackdrop → createGround → createEffects → createAudio → createPlayer/createCombat → createWeapon → createEnemies → createHUD → createGameFlow → createHelicopter → createEnvironment`。
+2. **初始化**：`runtime → createRenderer → createMaterials → createPhysics/createProps/createInput → createLevel → createBackdrop → createGround → createEffects → createAudio → createPlayer/createCombat → createWeapon → createEnemies → createHUD → createGameFlow → createHelicopter → createLightning → createEnvironment`。
 3. **射击**：`weapon.update → combat.playerShot → physics.raycast + enemies.raycast → enemy.damage → events("enemy:hit"/"enemy:killed"/"impact") → effects/audio/hud/combat.stats`。
 4. **受击**：`enemy fire → combat.enemyShot → player.damage → events("player:hit"/"player:dead") → hud/audio/flow`。
 5. **任务**：`flow.update → 中继交互/波次/撤离 → events("objective:progress"/"objective:done"/"objective:all"/"extraction:reached") → hud/audio/menus`。
@@ -572,6 +574,8 @@ context.events（weapon:fire / impact / explosion / player:step ...）
 | `enemy:killed` | `{enemy, pos, type}` | `walker`、`drone` | `combat`、`hud`、`audio` |
 | `enemy:spawn` | `{enemy}` | `enemies` | 诊断/扩展 |
 | `helicopter:spot` | `{targets: [{id}], playerExposed}` | `world/helicopter.js` | `hud`（M3 暴露标记） |
+| `lightning:flash` | `{night, postFlash, intensity, pos}` | `effects/lightning.js` | `render`（post.flash）、`hud`（准星泛白） |
+| `lightning:exposed` | `{targets: [{id}]}` | `core/environment.js` | `hud`（M4 暴露标记） |
 | `enemy:alert` | `{enemy, noise?}` | `enemies` | `flow`、`audio` |
 | `enemy:telegraph` | `{enemy, ...}` | `walker`、`drone` | `audio` |
 | `enemy:fire` | `{enemy, ...}` | `walker`、`drone` | `audio` |
@@ -978,11 +982,14 @@ console.log("visibility", env.visibility, "wetness", env.wetness);
 注意事项：
 
 - `createEnvironment` 是必需系统；失败会导致 runtime 致命错误。
-- 初始化顺序位于 `render → mats → ground → environment → ...`，确保 `apply()` 时表现层已就绪。
+- 初始化顺序位于 `helicopter → lightning → environment`，确保 `applyStatic` 能检测到两个子系统并启停。
 - 调用方不读取玩法状态，保持 L1.5 边界。
 - `apply()` 会调用 `render.rebakeEnvironment()`，在 `?q=low` 下 rebake 为空操作，`__G.render.env` 保持启动值。
-- `combine(timePreset, weatherPreset)` 是纯函数，合并两个预设的覆盖项（雾相加、颜色插值、强度相乘），不修改环境状态。
-- `LIGHTNING_TIMING` 控制雷雨内击闪间隔与持续时间；`HELICOPTER_TUNING` 控制暴雨时直升机巡逻的 spawn 概率与参数。
+- `combine(timePreset, weatherPreset)` 是纯函数，合并两个预设的覆盖项、乘算天气因子，不修改环境状态。
+- `LIGHTNING_TIMING` 控制闪电高能窗口（`high = 0.8s`）与基础间隔；`HELICOPTER_TUNING` 控制光柱半径/高度/锥角/扫描频率。
+- `lampOn` 是只读 getter（0..1），供 `lightning` 判定夜晚（`> 0.5`）。
+- `_onLightningFlash()` 触发能见度脉冲（`lightningT = 0.8`，连续闪电取 max 不叠加）并执行 `scanLightningExpose`。
+- 能见度回落用 `damp(..., 5, dt)`，约 0.8s 衰减到 1/e。
 
 ### 4.2 装配与渲染（`app/`、`render/`）
 
@@ -1840,6 +1847,38 @@ steam.stop();
 - `explosion` 会派发 `explosion` 事件，玩家与敌人都会响应。
 - `explosion` 的事件对象是复用的，订阅方必须立即拷贝 `pos/size`，不要长期持有引用。
 - `?show=fx` 展示模式会单独初始化特效系统。
+
+#### `createLightning(context)`（M4）
+
+```js
+function createLightning(context): LightningSystem;
+```
+
+| 成员 | 签名 | 说明 |
+| --- | --- | --- |
+| `enabled` | `boolean` | 由 `environment._applyStatic` 按 `target.lightningEnabled` 控制 |
+| `nextT` | `number` | 距下次闪电的秒数（诊断用） |
+| `flashes` | `number` | 累计触发次数 |
+| `setEnabled(on)` | `void` | 启用时立即排一次调度（不立刻劈）；停用清 `nextT` |
+| `update(dt)` | `void` | 倒计时 → 触发 → 重排；`game.state` 非 `playing/showcase` 时冻结 |
+| `trigger()` | `void` | 立即触发一次（调试/展示，不受 `enabled` 限制） |
+| `debug` | `object` | 内部状态、当前天气与调度区间 |
+
+调度区间按天气覆盖：`lightRain` 16–20s、`heavyRain` 8–12s；`clear`/`overcast` 不启用（`lightningEnabled=false`）。随机源为 `context.rng.fork()`，固定 `?seed` 下可复现。
+
+一次闪电同时做三件事：
+
+1. 派发 `thunder`（`renderer` 驱动天空 `uFlash`，`audio` 播雷声）
+2. 派发 `lightning:flash`（`renderer` 写 `post.flash` 全屏闪白，`hud` 准星泛白）
+3. 调 `environment._onLightningFlash()`（能见度脉冲 + 全场暴露扫描）
+
+注意事项：
+
+- 夜晚判定用 `environment.lampOn > 0.5`：`midnight = 1.0`、`dusk = 0.7` 判为夜晚，`dawn = 0.4`、`noon = 0.0` 判为白天。白天只闪天空，不 `post.flash`。
+- `QUALITY_PRESETS.envFlash === false`（`low`）时不 `post.flash`。
+- `post.flash` 的衰减在 `renderer.frame()` 内做（`exp(-3.2*dt)`），否则写入后会永久泛白。
+- 不适配敌人侧订阅：暴露扫描统一由 `environment.scanLightningExpose` 完成，避免同一闪电重复 `forceExpose`。
+- 失败降级：`FALLBACKS.lightning`。
 
 #### 4.5.2 `createAudio(context)`
 

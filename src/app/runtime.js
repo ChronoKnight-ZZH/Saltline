@@ -28,6 +28,7 @@ import { enableBenchmark } from "./benchmark.js";
 import { createShowcaseInput, createShowcasePlayer } from "./showcase-stubs.js";
 import { createEnvironment } from "../core/environment.js";
 import { createHelicopter } from "../world/helicopter.js";
+import { createLightning } from "../effects/lightning.js";
 import {
   DEFAULT_ENV,
   TIME_PRESETS,
@@ -210,10 +211,13 @@ async function startGame() {
       (context.game = createGameFlow(context)));
   }
   await setBootProgress("Reading the sky", 0.88);
-  // M3：helicopter 必须先于 environment 装配，否则 environment 的
-  // applyStatic 检测不到 context.helicopter，启停逻辑会被跳过。
+  // M3/M4：helicopter、lightning 必须先于 environment 装配，否则
+  // environment 的 applyStatic 检测不到它们，启停逻辑会被永久跳过。
   await initializeSystem("helicopter", "helicopter", () =>
     createHelicopter(context),
+  );
+  await initializeSystem("lightning", "lightning", () =>
+    createLightning(context),
   );
   await initializeSystem("environment", "environment", () =>
     createEnvironment(context),

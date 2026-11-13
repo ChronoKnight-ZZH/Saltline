@@ -3,18 +3,22 @@
 // Decided against M3.md 3.2: the beam keeps its own SpotLight instead of
 // borrowing the pooled PointLights (SpotLight is not pooled, so it is safe).
 import {
+  AdditiveBlending,
   CircleGeometry,
   ConeGeometry,
   DoubleSide,
   Mesh,
   MeshBasicMaterial,
+  NormalBlending,
   SpotLight,
   Vector3,
 } from "../vendor/three-r180.js";
 import { createRandom } from "../core/random.js";
 import { damp, clamp } from "../core/math.js";
 import { WORLD_BOUNDS } from "../core/config.js";
-import { HELICOPTER_TUNING } from "../core/environment-presets.js";
+import { HELICOPTER_TUNING, HELI_COMBAT } from "../core/environment-presets.js";
+import { buildHelicopter } from "./heli-model.js";
+import { createMissile } from "./missile.js";
 
 var Y_AXIS = new Vector3(0, 1, 0);
 
@@ -28,19 +32,27 @@ var tmpA = new Vector3();
 
 var tmpC = new Vector3();
 
+// 把单位锥体（ConeGeometry(0.5, 1)：本地 y ∈ [-0.5, 0.5]，顶点在 +y）
+// 摆放成「顶点落在 origin、底面中点在 origin + dir*range」的光锥。
+//   · 顶点需在 origin  → mesh.position = origin + dir*(range/2)
+//   · 本地 +Y 必须映射到 -dir（顶点朝后，底面朝 dir）→ 绕 (dir×Y) 轴转 acos(-dir·Y)
+//   · 底面半径 = tan(halfAngle)*range，ConeGeometry 半径 0.5 → xz 缩放 2·tan·range
 function orientCone(mesh, origin, dir, range, halfAngle) {
-  tmpA.set(0, -1, 0).copy(dir).normalize();
-  // 顶点在 origin（向下射：光圈朝下），几何高 = range
-  mesh.position.copy(origin).addScaledVector(dir, -range / 2);
-  mesh.scale.set(
-    Math.tan(halfAngle) * range * 2,
-    range,
-    Math.tan(halfAngle) * range * 2,
-  );
-  tmpC.copy(Y_AXIS).cross(dir);
-  if (tmpC.lengthSq() < 1e-8) tmpC.set(1, 0, 0);
-  tmpC.normalize();
-  mesh.quaternion.setFromAxisAngle(tmpC, Math.acos(-dir.y));
+  mesh.position.copy(origin).addScaledVector(dir, range / 2);
+  let r = Math.tan(halfAngle) * range;
+  mesh.scale.set(r * 2, range, r * 2);
+  tmpC.copy(dir).cross(Y_AXIS);
+  let sinA = tmpC.length();
+  if (sinA < 1e-8) {
+    // dir 与 Y 平行：转 0（同向）或 π（反向），轴任取 X
+    mesh.quaternion.setFromAxisAngle(
+      tmpA.set(1, 0, 0),
+      dir.y > 0 ? Math.PI : 0,
+    );
+    return;
+  }
+  // 归一化轴：dir×Y / |dir×Y|，角度 acos(-dir.y) 使 +Y → -dir
+  mesh.quaternion.setFromAxisAngle(tmpC.multiplyScalar(1 / sinA), Math.acos(-dir.y));
 }
 
 function createHelicopter(context) {
@@ -61,6 +73,17 @@ function createHelicopter(context) {
     decal: null,
     loop: null,
     audioT: 0,
+    // —— 战斗状态机 ——
+    mode: "patrol",        // patrol | alert | lock | engage | cooldown
+    lockT: 0,              // 持续照住玩家的累计时长
+    telegraphT: 0,         // 锁定后预警剩余
+    volleyLeft: 0,         // 本轮剩余待发导弹
+    volleyT: 0,            // 两弹间隔计时
+    cooldownT: 0,          // 再次锁敌冷却
+    lockPoint: new Vector3(), // 锁定瞬间的地面点（导弹落点，非追踪）
+    missiles: [],
+    model: null,
+    modelSpin: 0,
   };
 
   // M3.md 3.3：rng 派生自 context.rng.fork()，固定 seed 下路径可复现。
@@ -85,16 +108,16 @@ function createHelicopter(context) {
     context.scene.add(state.light.target);
   }
 
+  // 锥体几何所有画质共用；差别只在材质（volume 用加色叠加、否则普通半透明）。
   function setupCone(volumetric) {
     if (state.cone) return;
     let geo = new ConeGeometry(0.5, 1, 24, 1, true);
-    // ConeGeometry 顶点在上、底在下；orientCone 会整体旋转。
-    if (!volumetric) geo.translate(0, -0.5, 0);
     let mat = new MeshBasicMaterial({
       color: BEAM_COLOR,
       transparent: true,
-      opacity: 0.07,
-      blending: 1, // AdditiveBlending
+      opacity: volumetric ? 0.09 : 0.045,
+      // 体积光柱用加色叠加（opacity 已相应降低以补偿叠加亮度）
+      blending: volumetric ? AdditiveBlending : NormalBlending,
       depthWrite: false,
       side: DoubleSide,
       fog: false,
@@ -142,12 +165,24 @@ function createHelicopter(context) {
         state.loop = null;
       }
       state.lastSpot.clear();
+      // 停飞：清导弹、复位战斗状态、隐藏模型
+      for (let m of state.missiles) {
+        try { m.dispose(); } catch {}
+      }
+      state.missiles.length = 0;
+      state.mode = "patrol";
+      state.lockT = 0;
+      state.volleyLeft = 0;
+      state.cooldownT = 0;
+      if (state.model) state.model.root.visible = false;
       if (context.events && context.events.emit) {
         context.events.emit("helicopter:spot", { targets: [] });
       }
       return;
     }
     state.active = true;
+    ensureModel();
+    if (state.model) state.model.root.visible = true;
     state.orbitA = rng() * Math.PI * 2;
     let player = context.player;
     state.pos.set(
@@ -257,6 +292,139 @@ function createHelicopter(context) {
       state.spotT =
         HELICOPTER_TUNING.exposeInterval * (isLow ? 2 : 1);
       scanAndExpose();
+    }
+    // 5. 战斗状态机
+    updateCombat(dt, player);
+    // 6. 模型
+    updateModel(dt);
+  }
+
+  // —— 战斗状态机（docs/直升机单位设计.md）——
+  function ensureModel() {
+    if (state.model || !context.scene) return;
+    try {
+      state.model = buildHelicopter();
+      context.scene.add(state.model.root);
+    } catch (e) {
+      state.model = null;
+    }
+  }
+
+  function updateModel(dt) {
+    if (!state.model) return;
+    let m = state.model;
+    m.root.position.copy(state.pos);
+    m.root.rotation.y = state.yaw;
+    m.spin(dt, 18);
+    // 巡逻时轻微前倾，锁定时俯身朝目标
+    m.tilt(state.mode === "lock" ? 0.12 : 0.04, 0);
+  }
+
+  function playerGroundPoint(out) {
+    let p = context.player;
+    if (!p || !p.pos) return null;
+    out.copy(p.pos);
+    return out;
+  }
+
+  function updateCombat(dt, player) {
+    // 先更新已发射导弹（独立于状态）
+    for (let i = state.missiles.length - 1; i >= 0; i--) {
+      if (state.missiles[i].update(dt)) state.missiles.splice(i, 1);
+    }
+    if (!HELI_COMBAT.enabled || !player || player.alive === false) {
+      state.mode = "patrol";
+      state.lockT = 0;
+      return;
+    }
+    state.cooldownT = Math.max(0, state.cooldownT - dt);
+    let exposed = isInBeam(player.eye || player.pos) || isInBeam(player.pos);
+
+    switch (state.mode) {
+      case "patrol":
+        state.lockT = 0;
+        if (exposed && state.cooldownT <= 0) state.mode = "alert";
+        break;
+      case "alert":
+        if (!exposed) {
+          // 照丢 → 复位巡逻
+          state.mode = "patrol";
+          state.lockT = 0;
+        } else {
+          state.lockT += dt;
+          if (state.lockT >= HELI_COMBAT.lockOnTime) {
+            state.mode = "lock";
+            state.telegraphT = HELI_COMBAT.telegraphTime;
+            // 锁定瞬间记录地面点：导弹打这个点，不追踪
+            playerGroundPoint(state.lockPoint);
+            emitTelegraph();
+          }
+        }
+        break;
+      case "lock":
+        state.telegraphT -= dt;
+        if (state.telegraphT <= 0) {
+          state.mode = "engage";
+          state.volleyLeft = HELI_COMBAT.missileCount;
+          state.volleyT = 0;
+        }
+        break;
+      case "engage":
+        state.volleyT -= dt;
+        if (state.volleyLeft > 0 && state.volleyT <= 0) {
+          fireMissile();
+          state.volleyLeft--;
+          state.volleyT = HELI_COMBAT.missileInterval;
+        }
+        if (state.volleyLeft <= 0) {
+          state.mode = "cooldown";
+          state.cooldownT = HELI_COMBAT.reEngageCooldown;
+          state.lockT = 0;
+        }
+        break;
+      case "cooldown":
+        if (state.cooldownT <= 0) state.mode = "patrol";
+        break;
+    }
+  }
+
+  function emitTelegraph() {
+    if (context.events && context.events.emit) {
+      context.events.emit("enemy:telegraph", {
+        enemy: { type: "helicopter", pos: state.pos },
+        point: state.lockPoint.clone(),
+        duration: HELI_COMBAT.telegraphTime,
+      });
+    }
+    if (context.audio && context.audio.play) {
+      try {
+        context.audio.play("heliLock", { pos: state.pos });
+      } catch {}
+    }
+  }
+
+  function fireMissile() {
+    // 第二枚在落点上做 ±spreadOffset 散布，覆盖玩家走位
+    let idx = HELI_COMBAT.missileCount - state.volleyLeft;
+    let target = state.lockPoint.clone();
+    if (idx > 0) {
+      target.x += (rng() * 2 - 1) * HELI_COMBAT.spreadOffset;
+      target.z += (rng() * 2 - 1) * HELI_COMBAT.spreadOffset;
+    }
+    let origin = state.pos.clone();
+    origin.y -= 0.8;
+    let missile = createMissile(context, {
+      origin,
+      target,
+      speed: HELI_COMBAT.missileSpeed,
+      blastRadius: HELI_COMBAT.blastRadius,
+      blastDamage: HELI_COMBAT.blastDamage,
+    });
+    state.missiles.push(missile);
+    if (context.audio && context.audio.play) {
+      try {
+        context.audio.play("missileLaunch", { pos: state.pos });
+      } catch {}
     }
   }
 
@@ -378,14 +546,14 @@ function createHelicopter(context) {
     });
   }
 
-  // 初始化光束部件（惰性创建，避免 boot 阶段多余的对象）
+  // 初始化光束部件
   setupLight();
-  let beamName = context.quality && context.quality.name;
   let volumetric = !!(
     context.quality && context.quality.envVolumetricBeam === true
   );
   setupCone(volumetric);
   setupDecal();
+  ensureModel();
 
   return {
     get enabled() {
@@ -393,6 +561,15 @@ function createHelicopter(context) {
     },
     get active() {
       return state.active;
+    },
+    get mode() {
+      return state.mode;
+    },
+    get missiles() {
+      return state.missiles;
+    },
+    get model() {
+      return state.model;
     },
     get pos() {
       return state.pos;
@@ -420,7 +597,6 @@ function createHelicopter(context) {
           t,
         }));
       },
-      beamName,
     },
   };
 }

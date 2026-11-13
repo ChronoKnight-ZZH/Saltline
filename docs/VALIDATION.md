@@ -134,3 +134,42 @@
 | 音效 `setEnabled(false)` 用 0.12s 淡出代替硬停 | 避免 WebAudio 爆音；听觉上等同立即停止 |
 | `audio.js` 未改动 | 现状 `loop()` 句柄已有 `setPos/setGain/setPitch/stop`，无需改 |
 | runtime 装配顺序为 `helicopter` → `environment` | 保证 environment 构造时 `applyStatic` 能检测到直升机（M3.md §4.7.1 的顺序要求） |
+
+## M4 雷暴系统验收（2026-11-13）
+
+新增 `effects/lightning.js`，并接入 `environment._onLightningFlash` / `scanLightningExpose`、`enemies.forceExpose`（M3 交付）、`renderer` 的 `post.flash`、`hud` 的 `lightning:exposed` 与准星泛白。
+
+### 静态与构建
+
+| 项目 | 结果 |
+| --- | --- |
+| `npm run check` | 通过：70 模块 + `createLightning` 契约 + 归档与字体校验 |
+| `npm run build` | 通过：75 模块，`dist/index.html` 1,433.51 kB（gzip 442.47 kB） |
+
+### 无头逻辑冒烟（临时脚本，已删除）
+
+33/33 通过，覆盖：`lightningEnabled` 四种天气矩阵、`_applyStatic` 启停联动、`heavyRain` 8–12s / `lightRain` 16–20s 调度、`thunder` 强度（1.0 / 0.6）、夜晚 `postFlash=true`、白天与 `low` 画质 `postFlash=false`、`lightningT=0.8`、`current` 跳到峰值、连续闪电取 max 不叠加、`lambda=5` 在 0.8s 衰减到 1/e 内且不过冲、`scanLightningExpose` 只暴露「距离内 + LOS 可达 + 非 engage」的敌人、`lightning:exposed` payload、`game.state` 非 playing 冻结调度、非雨天不启用。
+
+光锥几何另做了一次独立验证（顶点落 `beam.origin`、底面中点落 `origin+dir*range`、底面半径 = `tan(halfAngle)*range`，偏差均 0.000m）。
+
+### 浏览器验收
+
+| 场景 | 预期 | 状态 |
+| --- | --- | --- |
+| `?time=midnight&weather=heavyRain` | 8–12s 一次闪电，全屏闪白 + 天空闪 + 雷声，能见度瞬时升到 88.2m | 待人工复验 |
+| `?time=midnight&weather=lightRain` | 16–20s 一次，强度较弱 | 待人工复验 |
+| `?weather=clear` / `overcast` | 无闪电 | 待人工复验 |
+| `?time=noon&weather=heavyRain` | 只有天空提亮，**无**全屏闪白 | 待人工复验 |
+| `?q=low&weather=heavyRain` | 无全屏闪白（`envFlash=false`） | 待人工复验 |
+| `?time=midnight&weather=heavyRain` | **无直升机**（`lightning=true`） | 待人工复验 |
+| 闪电后敌人 | LOS 可达者 `investigate`，HUD 标记出现，已在 `engage` 的不降级 | 待人工复验 |
+
+### 与 M4.md 的偏差记录
+
+| 偏差 | 原因 |
+| --- | --- |
+| 未改 `walker.js` / `drone.js` | 与 M4.md §4.3 决策一致：暴露扫描统一走 `environment.scanLightningExpose`，敌人侧订阅会重复 `forceExpose` 与多一次 LOS |
+| `environment` 新增 `lampOn` getter | M4.md 的 `_flash` 需要 `environment.lampOn` 判定夜晚，但 M1 未暴露该字段 |
+| `post.flash` 增加逐帧衰减 | **M4.md 漏项**：原版只有 game flow 写 `post.flash = 0`，从不衰减；闪电写入后会永久泛白。`renderer.frame()` 内按 `exp(-3.2*dt)` 收敛 |
+| `renderer` 订阅放在 `N` 定义之后 | 订阅回调访问 `N.post.flash`；写在 `N` 之前会踩 TDZ |
+| `_flash` 的 `night` 用 `dusk.lampOn=0.7` 也判夜晚 | M4.md §10 第 10 条明确标注需确认；黄昏雷雨天色已暗，全屏 flash 合理。若认为过亮，改 `NIGHT_LAMP_ON` 一处即可 |

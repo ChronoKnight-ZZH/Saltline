@@ -11,6 +11,7 @@ const EXPECTED_ENV_MODULES = [
   "src/core/environment.js",
   "src/core/environment-presets.js",
   "src/world/helicopter.js",
+  "src/effects/lightning.js",
 ];
 
 const EXPECTED_EXPORTS = {
@@ -23,6 +24,7 @@ const EXPECTED_EXPORTS = {
   ],
   "src/render/sky.js": ["applySkyPreset"],
   "src/world/helicopter.js": ["createHelicopter"],
+  "src/effects/lightning.js": ["createLightning"],
 };
 
 const EXPECTED_IMPORTS = {
@@ -30,11 +32,13 @@ const EXPECTED_IMPORTS = {
   "src/app/runtime.js": [
     "createEnvironment",
     "createHelicopter",
+    "createLightning",
     "DEFAULT_ENV",
     "TIME_PRESETS",
     "WEATHER_PRESETS",
   ],
   "src/audio/library.js": ["_9"],
+  "src/core/environment.js": ["LIGHTNING_TIMING"],
 };
 
 // readSourceGraph 的 key 可能是相对路径、绝对路径或 file:// URL。
@@ -112,6 +116,6 @@ console.log(
 
 if (!envProblems.length) {
   console.log(
-    "Environment contracts OK: createEnvironment / combine / applySkyPreset / createHelicopter / runtime wiring",
+    "Environment contracts OK: createEnvironment / combine / applySkyPreset / createHelicopter / createLightning / runtime wiring",
   );
 }

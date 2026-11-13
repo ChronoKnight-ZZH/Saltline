@@ -204,6 +204,19 @@ function createHUD(context) {
         if (ce && ce.id != null) I.expose(ce.id, 1.8);
       }
     }),
+    // M4：闪电暴露。payload = { targets: [{id}] }
+    context.events.on("lightning:exposed", (k) => {
+      if (!k || !k.targets) return;
+      for (let ce of k.targets) {
+        if (ce && ce.id != null) I.expose(ce.id, 1.8);
+      }
+    }),
+    // M4：闪电准星边缘泛白（短促，180ms 后移除）。
+    context.events.on("lightning:flash", (k) => {
+      if (!k) return;
+      v.classList.add("flash");
+      setTimeout(() => v.classList.remove("flash"), 180);
+    }),
     context.events.on("player:hit", (k) => {
       if (!k || !k.fromPos) return;
       let ce = b[0];

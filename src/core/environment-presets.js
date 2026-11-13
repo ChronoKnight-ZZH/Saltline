@@ -121,6 +121,22 @@ var HELICOPTER_TUNING = {
   maskRadius: 30,
 };
 
+// 直升机战斗状态机参数（与探照灯光柱参数分离）。
+// 设计见 docs/直升机单位设计.md。数值为 v1 初值，待 M6 实机校准。
+var HELI_COMBAT = {
+  enabled: true,        // 是否开启战斗行为（探照灯之外）
+  lockOnTime: 1.2,      // 光柱持续照住玩家满此时长才锁定
+  telegraphTime: 0.9,   // 锁定→发射预警（地面红标 + 蜂鸣）
+  missileCount: 2,      // 一轮齐射数量
+  missileInterval: 0.35,// 两弹间隔
+  missileSpeed: 26,     // 对地飞行速度 m/s
+  spreadOffset: 1.5,    // 第二枚弹着点散布 ±m
+  reEngageCooldown: 6,  // 齐射后再次锁敌冷却
+  blastRadius: 5,       // 爆炸半径
+  blastDamage: 30,      // 爆心基础伤害（玩家 50% 衰减在 combat.explode 内）
+  alertSpeedMul: 0.6,   // 警觉/锁定时轨道速度倍率
+};
+
 function combine(timeOfDay, weather) {
   let time = TIME_PRESETS[timeOfDay] || TIME_PRESETS[DEFAULT_ENV.timeOfDay],
     w = WEATHER_PRESETS[weather] || WEATHER_PRESETS[DEFAULT_ENV.weather],
@@ -154,5 +170,6 @@ export {
   FOG_K,
   LIGHTNING_TIMING,
   HELICOPTER_TUNING,
+  HELI_COMBAT,
   combine,
 };
