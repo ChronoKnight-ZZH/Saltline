@@ -30,11 +30,17 @@ defineModuleExports(enemiesShowcaseModule, {
 var ENEMY_TUNING = {
   gull: WALKER_TUNING,
   hound: DRONE_TUNING,
-  sightRange: 45,
+  // §1：45 → 120。min(visibility, 120) 才让 16 格天气组合真正产生分化
+  // （原值 45 把 dawn/noon/dusk 全天候钳死在同一档，天气完全不影响索敌）。
+  sightRange: 120,
   sightCone: 200,
   loseSight: 4,
   searchTime: 8,
   hearRadius: 45,
+  // §3：脚步噪声半径（乘 (1 - audioMask)）。奔跑 > 行走 > 蹲行。
+  runNoise: 20,
+  walkNoise: 8,
+  crouchNoise: 2,
   maxTokens: 2,
   maxTokensCrowd: 3,
   tokenGap: 1.25,
@@ -161,6 +167,8 @@ async function createEnemies(context) {
       tokens: 0,
       tokenT: -9,
       exposeCooldown: new Map(),
+      // §3：脚步噪声节流（见 player:step 订阅）
+      stepT: -9,
       lastType: "",
       wantT: {
         gull: -9,
@@ -596,6 +604,26 @@ async function createEnemies(context) {
     }),
     context.events.on("explosion", (T) => {
       T && T.pos && U.alert(T.pos, 30);
+    }),
+    // §3：脚步噪声接入 alert。此前只有开枪/爆炸走 alert，导致"平时看不出雨天区别"。
+    // 奔跑/行走/蹲行三档半径，仍然乘 (1 - audioMask)：
+    // heavyRain 下奔跑噪声 20 → 5.6m，实现"雨里敢跑"的致盲代偿。
+    // 节流：脚步约每 0.4–0.6s 一次，但 alert 会重置 modeT；
+    // 独立计时器把脚步唤醒压到每 0.8s 最多一次，避免状态机抖动。
+    context.events.on("player:step", (T) => {
+      let D = (T && T.pos) || (context.player && context.player.pos);
+      if (!D) return;
+      if (h.t - h.stepT < 0.8) return;
+      h.stepT = h.t;
+      // player:step 的 payload 带 sprint；蹲行从 player 读（事件不带）。
+      let C = context.player || {},
+        running = !!(T && T.sprint) || !!C.sprinting,
+        G = running
+          ? ENEMY_TUNING.runNoise
+          : C.crouching
+            ? ENEMY_TUNING.crouchNoise
+            : ENEMY_TUNING.walkNoise;
+      U.alert(D, G);
     }),
     context.events.on("game:state", (T) => {
       T && T.state === "title" && U.clear();

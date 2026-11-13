@@ -558,8 +558,13 @@ function createDrone(i, e, t, n) {
             m.esT <= 0 && ((m.esT = Gt.burstGap), m.shots--, z(D)),
             m.shots <= 0 &&
               (i.releaseToken(m),
+              // §5：耀斑期间开火间隔 ×1.6
               (m.cool =
-                Gt.cooldown[0] + o() * (Gt.cooldown[1] - Gt.cooldown[0])),
+                (Gt.cooldown[0] + o() * (Gt.cooldown[1] - Gt.cooldown[0])) *
+                ((s.environment &&
+                  s.environment.perception &&
+                  s.environment.perception.enemyFireMul) ||
+                  1)),
               m.bursts++,
               m.bursts >= 1 + (o() < 0.4 ? 1 : 0)
                 ? w()
@@ -611,9 +616,13 @@ function createDrone(i, e, t, n) {
     ((m.yawRate += (F - m.yawRate) * (1 - Math.exp(-10 * T))),
       (m.yaw += m.yawRate * T));
     let X = m.maxSpeed > m.speed ? Gt.accel : -Gt.accel * 1.4;
+    // §5：耀斑期间 Hound 移速同样被 EMP 拖慢
+    let flareSpeed = (s.environment && s.environment.perception && s.environment.perception.enemySpeedMul) || 1;
     ((m.prevSpeed = m.speed),
-      (m.speed = Q ? m.speed : uo(m.speed + X * T, 0, Math.max(m.maxSpeed, 0))),
-      !Q && X < 0 && m.speed < m.maxSpeed && (m.speed = m.maxSpeed));
+      (m.speed = Q
+        ? m.speed
+        : uo(m.speed + X * T, 0, Math.max(m.maxSpeed * flareSpeed, 0))),
+      !Q && X < 0 && m.speed < m.maxSpeed * flareSpeed && (m.speed = m.maxSpeed * flareSpeed));
     let ne = Math.sin(m.yaw),
       re = Math.cos(m.yaw);
     for (let I of i.list) {

@@ -7,6 +7,8 @@ import {
   WEATHER_PRESETS,
   DEFAULT_ENV,
   LIGHTNING_TIMING,
+  LIGHTNING_PEAK_CAP,
+  SOLAR_FLARE_TUNING,
   combine,
 } from "./environment-presets.js";
 
@@ -24,13 +26,15 @@ function createEnvironment(context) {
     visibility = {
       base: state.target.visibility,
       current: state.target.visibility,
-      lightningPeak: Math.min(state.target.visibility * 3.5, 200),
+      lightningPeak: Math.min(state.target.visibility * 3.5, LIGHTNING_PEAK_CAP),
       lightningT: 0,
     },
     // 启动时 mats.uniforms.wet 的默认值是 1（原版“港口一直湿”）。
     // wetApplied 为 false 时不写 mats.uniforms.wet，也不 damp current.wetness，
     // 保证 ?shot=1 的 ?shot=1 截图回归与改造前一致。
-    wetApplied = false;
+    wetApplied = false,
+    // §6：雷声响度窗口剩余时间（秒）。>0 时 audioMask 追加遮蔽。
+    thunderMaskT = 0;
 
   function cloneCurrent(target) {
     return {
@@ -50,6 +54,12 @@ function createEnvironment(context) {
     state.current.wetness = context.mats.uniforms.wet.value;
   }
 
+  // §5：耀斑 debuff 是否生效（只在峰值段）。diagnostics 也可读。
+  function flareEffect() {
+    let sf = context.solarflare;
+    return !!(sf && sf.effect > 0);
+  }
+
   let perception = {
     get visibility() {
       return visibility.current;
@@ -58,14 +68,37 @@ function createEnvironment(context) {
       return 1.0;
     },
     get audioMask() {
+      // §6：雷声窗口内追加遮蔽（雷声掩盖脚步 = 玩家的转移窗口）
+      if (thunderMaskT > 0) {
+        return Math.min(
+          LIGHTNING_TIMING.thunderMaskCap,
+          state.current.audioMask + LIGHTNING_TIMING.thunderMaskBoost,
+        );
+      }
       return state.current.audioMask;
     },
     get spreadScale() {
       return state.current.spreadScale;
     },
+    // §5：太阳耀斑 debuff（敌我双方同时被削）
+    get enemySpeedMul() {
+      return flareEffect() ? SOLAR_FLARE_TUNING.enemySpeedMul : 1;
+    },
+    get enemyFireMul() {
+      return flareEffect() ? SOLAR_FLARE_TUNING.enemyFireIntervalMul : 1;
+    },
+    get playerSwayMul() {
+      return flareEffect() ? SOLAR_FLARE_TUNING.playerSwayMul : 1;
+    },
+    get hudSuppressed() {
+      return !!(flareEffect() && SOLAR_FLARE_TUNING.suppressHudMarks);
+    },
+    get solarFlare() {
+      return context.solarflare ? context.solarflare.level : 0;
+    },
     footstepMaskAt() {
       // M1 只合并雨声；直升机在 M3 接入
-      return Math.min(state.current.audioMask, 0.85);
+      return Math.min(this.audioMask, 0.85);
     },
   };
 
@@ -118,6 +151,16 @@ function createEnvironment(context) {
         context.lightning.setEnabled(want);
       }
     }
+    // §5：太阳耀斑启停。只在白天晴天启用（夜间由直升机占据）。
+    if (context.solarflare && context.solarflare.setEnabled) {
+      let want =
+        SOLAR_FLARE_TUNING.enabled &&
+        state.timeOfDay !== "midnight" &&
+        state.weather === "clear";
+      if (context.solarflare.enabled !== want) {
+        context.solarflare.setEnabled(want);
+      }
+    }
     // M5：表现层——灯光、地面反射。
     // 这些只在切换时变一次，放这里避免每帧重复写入。
     let lampOn = t.lampOn,
@@ -159,6 +202,11 @@ function createEnvironment(context) {
     }
     c.audioMask = damp(c.audioMask, t.audioMask, 4, dt);
     c.spreadScale = damp(c.spreadScale, t.spreadScale, 4, dt);
+    // §6：雷声遮蔽窗口倒计时
+    if (thunderMaskT > 0) {
+      thunderMaskT -= dt;
+      if (thunderMaskT < 0) thunderMaskT = 0;
+    }
 
     if (visibility.lightningT > 0) {
       visibility.lightningT -= dt;
@@ -192,7 +240,7 @@ function createEnvironment(context) {
     state.weather = nextWeather;
     state.target = combine(nextTime, nextWeather);
     visibility.base = state.target.visibility;
-    visibility.lightningPeak = Math.min(visibility.base * 3.5, 200);
+    visibility.lightningPeak = Math.min(visibility.base * 3.5, LIGHTNING_PEAK_CAP);
     if (visibility.current > visibility.base) {
       visibility.current = visibility.base;
     }
@@ -275,6 +323,16 @@ function createEnvironment(context) {
         );
       }
     }
+    // §5：驱动太阳耀斑（包络 + 调度）
+    if (context.solarflare && context.solarflare.update) {
+      try {
+        context.solarflare.update(dt);
+      } catch (e) {
+        console.error(
+          "[environment] solarflare.update threw: " + (e && e.stack ? e.stack : e),
+        );
+      }
+    }
   }
 
   // M4：闪电瞬时暴露扫描。从玩家视角遍历敌人：距离粗筛 → LOS → forceExpose。
@@ -341,6 +399,13 @@ function createEnvironment(context) {
       visibility.current = Math.max(visibility.current, visibility.lightningPeak);
       // 全场暴露扫描（9 敌人单帧完成，不分帧）
       scanLightningExpose();
+    },
+    // §6：雷声到达 → 打开听觉遮蔽窗口（脚步近乎静音 = 玩家的转移窗口）。
+    _onThunderArrive() {
+      thunderMaskT = LIGHTNING_TIMING.thunderMaskTime;
+    },
+    get thunderMaskT() {
+      return thunderMaskT;
     },
     _updateHelicopter() {
       // M3

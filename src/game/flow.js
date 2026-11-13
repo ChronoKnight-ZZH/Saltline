@@ -61,6 +61,23 @@ var _l = {
   done: "Breacher is aboard. Saltline is dark. Good work.",
 };
 
+// §8：16 格归并为 4 种可播报的玩法模式（Lane），开局简报照此播报。
+var _lanes = {
+  A: "Wide recon \u2014 long sightlines, no noise cover. Move through shadow, and watch for the flare window.",
+  B: "Close quarters \u2014 rain blinds us both and masks your steps. Read the enemy on the flash, move on the thunder.",
+  C: "Night sweep \u2014 stay in the dark pools, and hold still when the beam crosses.",
+  D: "Storm \u2014 thick squall, no helicopter. Hug cover, push between flashes.",
+};
+
+// Lane 判定：雨优先于时间（B 覆盖任意时间 + 雨；D 是夜 + 雨的重叠但同样归 B/D）。
+// 与 §8 表格一致：A=白天×晴/阴，B=雨天（全天候），C=夜×晴/阴，D=夜×雨。
+function pickLane(timeOfDay, weather) {
+  let rainy = weather === "lightRain" || weather === "heavyRain",
+    night = timeOfDay === "midnight";
+  if (rainy) return night ? "D" : "B";
+  return night ? "C" : "A";
+}
+
 function createGameFlow(context) {
   let e = (context.render && context.render.post) || {},
     t = typeof e.saturation == "number" ? e.saturation : 1,
@@ -74,6 +91,11 @@ function createGameFlow(context) {
       } catch (L) {
         console.error(`[game] ${V} threw`, L);
       }
+    },
+    // §8：开局简报按当前时间/天气播报对应的 Lane。
+    laneBrief = () => {
+      let P = context.environment;
+      return P ? _lanes[pickLane(P.timeOfDay, P.weather)] || "" : "";
     },
     l = createMenus(context, {
       deploy() {
@@ -732,7 +754,7 @@ function createGameFlow(context) {
         return (
           (e.fade = 1 - smoothstep(0.25, Math.min(h, 2.6), u)),
           !f && u > 0.5 && ((f = !0), l.locationCard(!0)),
-          !p && u > 1.3 && ((p = !0), o.radio && o.radio(_l.intro, 4.2)),
+          !p && u > 1.3 && ((p = !0), o.radio && o.radio(laneBrief() + " " + _l.intro, 6.4)),
           u > h - 0.6 &&
             !o.root?.classList.contains("on") &&
             (o.show(!0), o.setObjective(D())),

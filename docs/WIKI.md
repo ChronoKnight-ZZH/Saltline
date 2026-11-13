@@ -152,6 +152,7 @@ context.time.dt = dt; context.time.t += dt; context.time.real = performance.now(
 | `enemies` | `EnemySystem` | `createEnemies` | 敌人池、生成、射线检测 |
 | `helicopter` | `HelicopterSystem` | `createHelicopter` | 夜晴直升机光柱/音效/暴露扫描（M3），见 4.3.6 |
 | `lightning` | `LightningSystem` | `createLightning` | 雷暴闪电调度与视觉触发（M4），见 4.5.1 之后的 `createLightning` |
+| `solarflare` | `SolarFlareSystem` | `createSolarFlare` | 白天晴天太阳耀斑/EMP 事件（§5） |
 | `environment` | `EnvironmentSystem` | `createEnvironment` | 时间/天气/能见度中枢，见 4.1.6 |
 | `hud` | `HUDSystem` | `createHUD` | DOM HUD |
 | `game` | `GameFlow` | `createGameFlow` | 任务状态机与菜单 |
@@ -306,9 +307,10 @@ src/
 │  ├─ models.js                  # 四足 Gull 与 Hound 骨骼/网格
 │  ├─ walker.js                  # Gull 行为
 │  └─ drone.js                   # Hound 行为
-├─ effects/                      # 特效（4）
+├─ effects/                      # 特效（5）
 │  ├─ effects.js                 # 特效系统与事件接线
 │  ├─ lightning.js               # 雷暴闪电调度与触发（M4）
+│  ├─ solarflare.js              # 白天晴天的太阳耀斑/EMP 事件（§5）
 │  ├─ particles.js               # 粒子纹理、批次、材质
 │  └─ pools.js                   # 弹壳/碎屑/贴花复用池
 ├─ audio/                        # 音频（4）
@@ -576,6 +578,8 @@ context.events（weapon:fire / impact / explosion / player:step ...）
 | `helicopter:spot` | `{targets: [{id}], playerExposed}` | `world/helicopter.js` | `hud`（M3 暴露标记） |
 | `lightning:flash` | `{night, postFlash, intensity, pos}` | `effects/lightning.js` | `render`（post.flash）、`hud`（准星泛白） |
 | `lightning:exposed` | `{targets: [{id}]}` | `core/environment.js` | `hud`（M4 暴露标记） |
+| `solarflare:start` | `{duration, enemySpeedMul, enemyFireMul, playerSwayMul}` | `effects/solarflare.js` | `hud`/音频（§5） |
+| `solarflare:end` | `{}` | `effects/solarflare.js` | `hud`/音频（§5） |
 | `enemy:alert` | `{enemy, noise?}` | `enemies` | `flow`、`audio` |
 | `enemy:telegraph` | `{enemy, ...}` | `walker`、`drone` | `audio` |
 | `enemy:fire` | `{enemy, ...}` | `walker`、`drone` | `audio` |

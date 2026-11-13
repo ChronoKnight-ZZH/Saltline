@@ -808,7 +808,13 @@ async function createWeapon(context) {
         yr,
       te = lerp(1, 0.3, k.adsE),
       he = k.t,
-      pe = lerp(1, 0.4, k.adsE);
+      // §5：耀斑期间瞄准摆动 ×1.8（传感器被干扰，不能架枪狙击）
+      pe =
+        lerp(1, 0.4, k.adsE) *
+        ((context.environment &&
+          context.environment.perception &&
+          context.environment.perception.playerSwayMul) ||
+          1);
     if (
       ((k.swY.v += clamp(be.look ? be.look.dx : 0, -0.2, 0.2) * 3.2 * pe),
       (k.swP.v += clamp(be.look ? be.look.dy : 0, -0.2, 0.2) * 2.6 * pe),

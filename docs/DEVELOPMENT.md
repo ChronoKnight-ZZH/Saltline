@@ -15,6 +15,8 @@
 | `core/environment.js` | `createEnvironment`：时间/天气/能见度中枢，perception、visibility、set/randomize |
 | `world/helicopter.js` | `createHelicopter`（M3）：夜晴光柱、盘旋、音效、`isInBeam`、暴露扫描 |
 | `effects/lightning.js` | `createLightning`（M4）：闪电调度、`lightning:flash`/`thunder` 派发、能见度脉冲触发 |
+| `effects/solarflare.js` | `createSolarFlare`：白天晴天耀斑/EMP 调度与包络；debuff 经 `perception` 暴露 |
+| 平衡数值 | `ENEMY_TUNING.sightRange=120`、脚步噪声 20/8/2、`spreadScale` 1.15/1.35、`LIGHTNING_PEAK_CAP=120`、`HELICOPTER_TUNING`、`SOLAR_FLARE_TUNING`（见 `docs/游戏参数设计方案.md`） |
 | `render/renderer.js` | `createRenderer`：场景、镜头、光照、resize、渲染通道 |
 | `render/sky.js`、`shadows.js`、`postprocessing.js` | 天空着色器、软阴影和后处理 |
 | `render/materials/` | `materials.js` 创建材质；`catalog.js` 定义材质数据；`surface-shaders.js` 和 `textures.js` 生成表面/纹理 |

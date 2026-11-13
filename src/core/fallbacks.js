@@ -100,6 +100,20 @@ var FALLBACKS = {
     message: noop,
     hitmarker: noop,
   }),
+  // §5：太阳耀斑创建失败时静默降级；environment 会跳过启停。
+  solarflare: () => ({
+    stub: !0,
+    enabled: false,
+    active: false,
+    level: 0,
+    effect: 0,
+    nextT: 0,
+    flares: 0,
+    setEnabled: noop,
+    update: noop,
+    trigger: noop,
+    debug: {},
+  }),
   // M4：闪电创建失败时静默降级；environment 检测不到 setEnabled 就跳过启停。
   lightning: () => ({
     stub: !0,

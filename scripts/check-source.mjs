@@ -12,6 +12,7 @@ const EXPECTED_ENV_MODULES = [
   "src/core/environment-presets.js",
   "src/world/helicopter.js",
   "src/effects/lightning.js",
+  "src/effects/solarflare.js",
 ];
 
 const EXPECTED_EXPORTS = {
@@ -25,10 +26,13 @@ const EXPECTED_EXPORTS = {
     "WEATHER_PRESETS",
     "DEFAULT_ENV",
     "combine",
+    "LIGHTNING_PEAK_CAP",
+    "SOLAR_FLARE_TUNING",
   ],
   "src/render/sky.js": ["applySkyPreset"],
   "src/world/helicopter.js": ["createHelicopter"],
   "src/effects/lightning.js": ["createLightning"],
+  "src/effects/solarflare.js": ["createSolarFlare"],
 };
 
 const EXPECTED_IMPORTS = {
@@ -37,13 +41,14 @@ const EXPECTED_IMPORTS = {
     "createEnvironment",
     "createHelicopter",
     "createLightning",
+    "createSolarFlare",
     "DEFAULT_ENV",
     "TIME_PRESETS",
     "WEATHER_PRESETS",
   ],
   "src/app/showcases.js": ["environmentShowcaseModule"],
   "src/audio/library.js": ["_9"],
-  "src/core/environment.js": ["LIGHTNING_TIMING"],
+  "src/core/environment.js": ["LIGHTNING_TIMING", "SOLAR_FLARE_TUNING"],
 };
 
 // readSourceGraph 的 key 可能是相对路径、绝对路径或 file:// URL。

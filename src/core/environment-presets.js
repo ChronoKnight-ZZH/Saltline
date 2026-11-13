@@ -81,7 +81,8 @@ var WEATHER_PRESETS = {
   lightRain: {
     visibilityMul: 0.5,
     audioMask: 0.5,
-    spreadScale: 1.05,
+    // §4：1.05 → 1.15，让"雨天弹道散"可感知
+    spreadScale: 1.15,
     rainLevel: 0.45,
     wetness: 0.6,
     lightning: true,
@@ -90,7 +91,8 @@ var WEATHER_PRESETS = {
   heavyRain: {
     visibilityMul: 0.28,
     audioMask: 0.72,
-    spreadScale: 1.15,
+    // §4：1.15 → 1.35，把玩家推向 <15m 的 CQC 距离
+    spreadScale: 1.35,
     rainLevel: 1.0,
     wetness: 1.0,
     lightning: true,
@@ -109,16 +111,49 @@ var LIGHTNING_TIMING = {
   dampLambda: 5,
   minInterval: 8,
   maxInterval: 20,
+  // §6：分雨档间隔（替换 lightning.js 里的硬编码表）
+  lightRainInterval: { min: 14, max: 26 },
+  heavyRainInterval: { min: 6, max: 12 },
+  // §6：雷声比闪光晚到（拟合现实）。闪光给情报，雷声给转移窗口。
+  thunderDelay: { min: 1.8, max: 2.8 },
+  // §6：雷声响度窗口内的追加听觉遮蔽与持续时间
+  thunderMaskBoost: 0.3,
+  thunderMaskCap: 0.85,
+  thunderMaskTime: 3,
 };
 
+// §6：闪光能见度峰值封顶 120m = 敌兵视距上限，
+// 避免"闪电照亮全场但敌人仍看不见你"的语义断裂。
+var LIGHTNING_PEAK_CAP = 120;
+
+// §7：夜晴直升机（E 项占位符填实）
 var HELICOPTER_TUNING = {
-  radius: 18,
-  height: 22,
-  speed: 0.35,
-  beamHalfAngle: 0.18,
-  beamRange: 45,
+  radius: 45,
+  height: 28,
+  speed: 6,
+  // 14° 锥角：贴集装箱阴影能躲
+  beamHalfAngle: (14 * Math.PI) / 180,
+  beamRange: 40,
   exposeInterval: 0.25,
   maskRadius: 30,
+};
+
+// §5：白天晴天的太阳耀斑 / EMP 事件
+var SOLAR_FLARE_TUNING = {
+  enabled: true,
+  // 触发条件：白天（dawn/noon/dusk）且 clear
+  interval: { min: 25, max: 45 },
+  // 时序（秒）：起升 0.5 → 峰值 2.0 → 回落 1.5，总窗口约 4s
+  rise: 0.5,
+  peak: 2,
+  fall: 1.5,
+  // 敌方机械 debuff
+  enemySpeedMul: 0.5,
+  enemyFireIntervalMul: 1.6,
+  // 玩家 debuff
+  playerSwayMul: 1.8,
+  // HUD 暴露标记不可信（不显示新标记）
+  suppressHudMarks: true,
 };
 
 // 直升机战斗状态机参数（与探照灯光柱参数分离）。
@@ -169,7 +204,9 @@ export {
   DEFAULT_ENV,
   FOG_K,
   LIGHTNING_TIMING,
+  LIGHTNING_PEAK_CAP,
   HELICOPTER_TUNING,
   HELI_COMBAT,
+  SOLAR_FLARE_TUNING,
   combine,
 };

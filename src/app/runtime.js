@@ -29,6 +29,7 @@ import { createShowcaseInput, createShowcasePlayer } from "./showcase-stubs.js";
 import { createEnvironment } from "../core/environment.js";
 import { createHelicopter } from "../world/helicopter.js";
 import { createLightning } from "../effects/lightning.js";
+import { createSolarFlare } from "../effects/solarflare.js";
 import {
   DEFAULT_ENV,
   TIME_PRESETS,
@@ -218,6 +219,9 @@ async function startGame() {
   );
   await initializeSystem("lightning", "lightning", () =>
     createLightning(context),
+  );
+  await initializeSystem("solarflare", "solarflare", () =>
+    createSolarFlare(context),
   );
   await initializeSystem("environment", "environment", () =>
     createEnvironment(context),

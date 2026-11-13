@@ -228,3 +228,63 @@
 | `weather/musicMood` 用 `Object.defineProperties` 而非 `Object.assign` getter | **实机 bug**：`Object.assign` 会把 getter **求值成快照**，导致 `setWeather` 后读到的仍是初值。首轮测试 9 项失败即此原因 |
 | `audio.update` 只改 4 行（乘 `weatherMul`） | `setWeather` 直接写 gain 会被下一帧 `update` 覆盖；方案 §3.1.1 自己也指出了这点 |
 | HUD 准星闪白与暴露投影未重做 | M4 已加 `.h-cross.flash` + 闪白订阅；M3 已实现世界坐标投影。M5 只确认，不重复实现 |
+
+## 平衡参数同步验收（2026-11-13）
+
+依据 `docs/游戏参数设计方案.md` 落地策划平衡数值，覆盖 §1–§8。
+
+### 静态与构建
+
+| 项目 | 结果 |
+| --- | --- |
+| `npm run check` | 通过：73 模块 + 契约 + 归档与字体校验 |
+| `npm run build` | 通过：78 模块，`dist/index.html` 1,446.01 kB（gzip 446.76 kB） |
+| 无头冒烟（临时脚本，已删除） | **66/66 通过** |
+
+### 落地清单
+
+| 项 | 改动 |
+| --- | --- |
+| §1 | `ENEMY_TUNING.sightRange` 45 → **120** |
+| §3 | 新增 `runNoise/walkNoise/crouchNoise`（20/8/2），订阅 `player:step` 调 `alert`，0.8s 节流 |
+| §4 | `WEATHER_PRESETS.spreadScale` lightRain 1.05→**1.15**、heavyRain 1.15→**1.35** |
+| §5 | 新增 `effects/solarflare.js` + `SOLAR_FLARE_TUNING`；`perception` 暴露 4 个 debuff getter |
+| §6 | `LIGHTNING_PEAK_CAP = 120`；雷声延迟 1.8–2.8s；间隔 14–26/6–12；雷声遮蔽 +0.3 / 3s |
+| §7 | `HELICOPTER_TUNING` 全部填实（45/28/6/14°/40/0.25/30） |
+| §8 | `flow.js` 新增 `pickLane` + `laneBrief`，开局按 Lane 播报 |
+| §9 | walker/drone 移速与攻速接 debuff；weapon 摆动 ×1.8；hud 标记抑制 |
+
+### 冒烟覆盖要点
+
+- **§2 矩阵逐格核对**：16 格全部命中设计值（dawn/clear 120 … midnight/heavyRain 25），极差 4.8×
+- **§3 遮蔽实算**：奔跑 heavyRain 5.6m、行走 2.24m、开枪 12.6m
+- **§6 先闪后雷时序**：`trigger()` 后 flash 立即、thunder 未发；t=1.0s 仍无；t≈3.2s 到达并打开 3s 遮蔽（0.72→0.85 封顶）；窗口过期后回到 0.72
+- **§6 峰值**：夜雨 88.2m、昼雨封顶 120m
+- **§5 耀斑包络**：起升 0.25s 时 level≈0.5 **且 debuff 未生效**；进入峰值后 4 个 debuff 全开；回落段 debuff 关闭；结束派发 `solarflare:end`
+- **§5 触发门控**：午夜/雨天均 `enabled=false`，dusk+clear 为 true
+- **§8 Lane**：8 个组合全对
+
+### 过程中发现并修复的 bug
+
+| bug | 说明 |
+| --- | --- |
+| **`lightning.js` 出现两个 `update` 定义** | 插入延迟雷声逻辑时保留了旧版 `update`，后者覆盖前者，导致雷声永不播放（测试 3 项失败暴露）。已删除重复定义 |
+| 测试自身时机错误 | `audioMask` 有 damp 过渡，切换天气后需等收敛再断言遮蔽叠加；已改为先跑 240 帧 |
+
+### 浏览器验收
+
+| 场景 | 预期 | 状态 |
+| --- | --- | --- |
+| 白天晴（dawn/noon/dusk × clear） | 敌兵视距 120m；每 25–45s 出现耀斑，敌方变慢、玩家摆动加剧、HUD 标记断供 | 待人工复验 |
+| 雨天（任意时间） | 视距 45–110m；雨里奔跑只到 5.6m；弹道明显散；先闪后雷 | 待人工复验 |
+| 夜晴 | 直升机 radius 45 / height 28 / 6m/s，绕圈约 47s，14° 窄光柱 | 待人工复验 |
+| 夜雨 | 视距 25m、闪电 6–12s、无直升机 | 待人工复验 |
+| 开局简报 | 按 Lane 播报对应战术提示 | 待人工复验 |
+
+### 未纳入本次同步
+
+| 项 | 原因 |
+| --- | --- |
+| 耀斑的 `post` 视觉层（过曝/眩光/扫描线）与电子嗡鸣音效 | 设计稿 §5.4 要求，但需要改 `postprocessing` shader 与新增合成音色；本次只输出 `perception.solarFlare` 强度供后续消费 |
+| `TIME_PRESETS.ambient` / `sunDir` | 属 `游戏参数.md` §4 的 #2/#3 遗留项，不在本次设计方案范围内 |
+| `环境切换仅标题/暂停菜单可用` | 设计稿 §9 提到，但涉及 `menus.js`/`flow.js` 交互重构，且与当前 M2 已实现的下拉行为冲突，需单独确认 |

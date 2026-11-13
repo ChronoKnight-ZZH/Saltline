@@ -294,7 +294,11 @@ function createHUD(context) {
     },
     // M3：暴露标记（helicopter:spot / lightning:flash 共用）。
     // 绑定 enemy.id，上限 3，按距离淘汰最远；life 取 max 合并多重暴露。
+    // §5：太阳耀斑期间 HUD 被干扰，标记不可信——不新增标记，
+    // 已有标记照常衰减（避免"突然全消失"的突兀感）。
     expose(k, ce = 1.8) {
+      let p = context.environment && context.environment.perception;
+      if (p && p.hudSuppressed) return;
       let entry = exposedMarks.get(k);
       if (entry) {
         entry.life = Math.max(entry.life, ce);
@@ -322,8 +326,7 @@ function createHUD(context) {
       );
       Hx.appendChild(el);
       exposedMarks.set(k, { el, life: ce, dist: 0 });
-    },
-    setPrompt(k, ce = 0) {      let ve = !!k;
+    },    setPrompt(k, ce = 0) {      let ve = !!k;
       if (
         (ve !== X.promptOn &&
           ((X.promptOn = ve),

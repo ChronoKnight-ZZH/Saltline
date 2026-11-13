@@ -348,12 +348,14 @@ function createWalker(i, e, t, n) {
       i.think(d, y, 0.4));
     let A = d.mode === "engage",
       _ = d.hp < Pn.hp * 0.5,
-      M = Pn.patrolSpeed,
+      // §5：太阳耀斑期间机械造物移速被 EMP 拖慢
+      flareSpeed = (s.environment && s.environment.perception && s.environment.perception.enemySpeedMul) || 1,
+      M = Pn.patrolSpeed * flareSpeed,
       E,
       w,
       S;
     if (A && b) {
-      M = Pn.maxSpeed;
+      M = Pn.maxSpeed * flareSpeed;
       let P = d.atk !== "idle";
       ((d.flipT -= y),
         d.flipT <= 0 &&
@@ -378,7 +380,7 @@ function createWalker(i, e, t, n) {
             (w = b.pos.y + d.alt)));
     } else
       d.mode === "investigate" || d.mode === "search"
-        ? ((M = 5.5),
+        ? ((M = 5.5 * flareSpeed),
           (d.orbitA += 0.5 * y),
           (E = d.lastKnown.x + Math.cos(d.orbitA) * 4.5),
           (S = d.lastKnown.z + Math.sin(d.orbitA) * 4.5),
@@ -577,7 +579,13 @@ function createWalker(i, e, t, n) {
       }
       d.shots <= 0 &&
         ((d.atk = "idle"),
-        (d.cool = Pn.cooldown[0] + o() * (Pn.cooldown[1] - Pn.cooldown[0])),
+        // §5：耀斑期间开火间隔 ×1.6（攻击慢 60%）
+        (d.cool =
+          (Pn.cooldown[0] + o() * (Pn.cooldown[1] - Pn.cooldown[0])) *
+          ((s.environment &&
+            s.environment.perception &&
+            s.environment.perception.enemyFireMul) ||
+            1)),
         i.releaseToken(d));
     }
     (_ &&
