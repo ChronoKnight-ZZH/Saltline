@@ -47,11 +47,11 @@
 
 重构前：
 
-![重构前固定场景](refactor-before.jpg)
+![重构前固定场景](screenshots/refactor-before.jpg)
 
 重构后：
 
-![重构后固定场景](refactor-after.jpg)
+![重构后固定场景](screenshots/refactor-after.jpg)
 
 JPEG 截图不是逐字节相同；逐像素比较的 RGB 平均通道差值分别约为 **0.00772 / 0.00746 / 0.00953**（0–255），各通道最大差值均为 9。测量见 `refactor-image-comparison.json`。
 
@@ -69,7 +69,7 @@ JPEG 截图不是逐字节相同；逐像素比较的 RGB 平均通道差值分�
 
 采样见 `refactor-live-check.json`。测试结束后保留暂停状态，浏览器测试尺寸覆盖已恢复默认。
 
-![模块化构建版实际游戏](refactor-gameplay.jpg)
+![模块化构建版实际游戏](screenshots/refactor-gameplay.jpg)
 
 ## 范围
 

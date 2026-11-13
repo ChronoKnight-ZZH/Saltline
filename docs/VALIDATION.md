@@ -40,15 +40,15 @@
 
 开发版标题：
 
-![开发版标题](local-title.jpg)
+![开发版标题](screenshots/local-title.jpg)
 
 开发版实际战斗画面：
 
-![开发版战斗](local-gameplay.jpg)
+![开发版战斗](screenshots/local-gameplay.jpg)
 
 构建版标题：
 
-![构建版标题](production-title.jpg)
+![构建版标题](screenshots/production-title.jpg)
 
 ## 验收范围
 
