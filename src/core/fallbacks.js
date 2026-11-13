@@ -2,6 +2,7 @@ import {
   Color,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  Vector3,
 } from "../vendor/three-r180.js";
 
 var noop = () => {};
@@ -90,8 +91,19 @@ var FALLBACKS = {
     message: noop,
     hitmarker: noop,
   }),
-  environment: () => {
-    let visibility = {
+  // M3: 直升机创建失败时静默降级；environment 检测到 stub 也会跳过更新。
+  helicopter: () => ({
+    stub: !0,
+    enabled: false,
+    active: false,
+    pos: new Vector3(),
+    setEnabled: noop,
+    update: noop,
+    isInBeam: () => !1,
+    getSpotTargets: () => [],
+    setModel: noop,
+  }),
+  environment: () => {    let visibility = {
         base: 200,
         current: 200,
         lightningPeak: 0,

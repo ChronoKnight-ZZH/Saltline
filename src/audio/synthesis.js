@@ -2344,6 +2344,26 @@ function* W8(i, e) {
   return Rv(s, i * 8, !0);
 }
 
+// M3: night helicopter rotor loop (2s, seamless)。频率取 0.5 整数倍，
+// 保证循环首尾相位闭合，避免 WebAudio loop 点爆音。
+function* _9(i, e) {
+  let n = i * 2,
+    s = new Float32Array(n);
+  for (let r = 0; r < n; r++) {
+    let a = r / i,
+      l = vt * 2 * a,
+      g = l + 0.35 * Math.sin(l * 0.5 + 1.3);
+    s[r] =
+      (Math.sin(g * 18.5) +
+        0.6 * Math.sin(g * 23 + 1.2) +
+        0.3 * Math.sin(g * 9.5) +
+        0.2 * Math.sin(g * 46)) *
+      0.16 *
+      (0.8 + 0.2 * Math.sin(l + 0.6));
+  }
+  return [s];
+}
+
 export {
   vt,
   ao,
@@ -2412,6 +2432,7 @@ export {
   B8,
   O8,
   H8,
+  _9,
   V8,
   W8,
 };

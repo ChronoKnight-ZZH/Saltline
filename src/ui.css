@@ -753,6 +753,49 @@ body {
 .h-marks.off {
   opacity: 0;
 }
+/* M3: helicopter/lightning exposure marks, projected like .h-wm */
+.h-exposed {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.h-ex {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform, opacity;
+  color: var(--signal-hot);
+}
+.h-ex i {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  background: rgba(11, 13, 15, 0.45);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+}
+.h-ex b {
+  position: absolute;
+  left: -22px;
+  top: 9px;
+  width: 44px;
+  text-align: center;
+  font: 700 10px/1 var(--f-mono);
+  color: var(--signal);
+  letter-spacing: 0.04em;
+}
+.h-ex b::after {
+  content: attr(data-dist);
+  display: block;
+  margin-top: 2px;
+  font: 400 8px/1 var(--f-mono);
+  color: var(--bone-dim);
+}
 .h-wm {
   position: absolute;
   left: 0;

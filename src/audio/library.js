@@ -45,6 +45,7 @@ import {
   x8,
   y8,
   z8,
+  _9,
 } from "./synthesis.js";
 import {
   $8,
@@ -554,6 +555,16 @@ var Go = {
     loop: 1,
     ref: 10,
     roll: 0.6,
+  },
+  // M3: night helicopter rotor loop（低音区避开 gull_rotor 的中频）
+  helicopter: {
+    gen: _9,
+    n: 1,
+    sr: pl,
+    peak: 0.4,
+    loop: 1,
+    ref: 6,
+    roll: 0.4,
   },
   music_drone: {
     gen: G8,

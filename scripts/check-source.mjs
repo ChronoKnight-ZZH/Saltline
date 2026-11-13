@@ -10,6 +10,7 @@ import {
 const EXPECTED_ENV_MODULES = [
   "src/core/environment.js",
   "src/core/environment-presets.js",
+  "src/world/helicopter.js",
 ];
 
 const EXPECTED_EXPORTS = {
@@ -21,16 +22,19 @@ const EXPECTED_EXPORTS = {
     "combine",
   ],
   "src/render/sky.js": ["applySkyPreset"],
+  "src/world/helicopter.js": ["createHelicopter"],
 };
 
 const EXPECTED_IMPORTS = {
   "src/render/renderer.js": ["FogExp2", "applySkyPreset"],
   "src/app/runtime.js": [
     "createEnvironment",
+    "createHelicopter",
     "DEFAULT_ENV",
     "TIME_PRESETS",
     "WEATHER_PRESETS",
   ],
+  "src/audio/library.js": ["_9"],
 };
 
 // readSourceGraph 的 key 可能是相对路径、绝对路径或 file:// URL。
@@ -108,6 +112,6 @@ console.log(
 
 if (!envProblems.length) {
   console.log(
-    "Environment contracts OK: createEnvironment / combine / applySkyPreset / runtime wiring",
+    "Environment contracts OK: createEnvironment / combine / applySkyPreset / createHelicopter / runtime wiring",
   );
 }

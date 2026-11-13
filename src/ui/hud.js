@@ -112,8 +112,9 @@ function createHUD(context) {
     T = O.querySelector(".h-pips"),
     D = O.querySelector(".h-wname"),
     C = O.querySelector(".h-cue"),
-    G = createElement("div", "h-marks");
-  (t.append(G, n, c, d, y, v, x, m, E, w, S, O), e.appendChild(t));
+    G = createElement("div", "h-marks"),
+    Hx = createElement("div", "h-exposed");
+  (t.append(G, Hx, n, c, d, y, v, x, m, E, w, S, O), e.appendChild(t));
   let j = createElement(
     "div",
     "comms",
@@ -161,6 +162,7 @@ function createHUD(context) {
     L = 0,
     Z = [],
     J = [],
+    exposedMarks = new Map(),
     oe = new Vector3(),
     fe = null,
     le = -1;
@@ -194,6 +196,13 @@ function createHUD(context) {
         (k && (k.type || (k.enemy && k.enemy.type))) || "machine",
       ).toUpperCase();
       ((fe = I.feed(`<b>${ce}</b> destroyed`)), (le = context.time.frame));
+    }),
+    // M3：直升机光柱暴露。payload = { targets: [{id}], playerExposed }
+    context.events.on("helicopter:spot", (k) => {
+      if (!k || !k.targets) return;
+      for (let ce of k.targets) {
+        if (ce && ce.id != null) I.expose(ce.id, 1.8);
+      }
     }),
     context.events.on("player:hit", (k) => {
       if (!k || !k.fromPos) return;
@@ -270,8 +279,38 @@ function createHUD(context) {
         );
       });
     },
-    setPrompt(k, ce = 0) {
-      let ve = !!k;
+    // M3：暴露标记（helicopter:spot / lightning:flash 共用）。
+    // 绑定 enemy.id，上限 3，按距离淘汰最远；life 取 max 合并多重暴露。
+    expose(k, ce = 1.8) {
+      let entry = exposedMarks.get(k);
+      if (entry) {
+        entry.life = Math.max(entry.life, ce);
+        return;
+      }
+      if (exposedMarks.size >= 3) {
+        let farthest = null,
+          farthestD = -1;
+        for (let [id, e] of exposedMarks) {
+          if (e.dist > farthestD) {
+            farthestD = e.dist;
+            farthest = id;
+          }
+        }
+        if (farthest != null) {
+          let e = exposedMarks.get(farthest);
+          if (e && e.el) e.el.remove();
+          exposedMarks.delete(farthest);
+        }
+      }
+      let el = createElement(
+        "div",
+        "h-ex",
+        `<i></i><b>${String(k).padStart(2, "0")}</b>`,
+      );
+      Hx.appendChild(el);
+      exposedMarks.set(k, { el, life: ce, dist: 0 });
+    },
+    setPrompt(k, ce = 0) {      let ve = !!k;
       if (
         (ve !== X.promptOn &&
           ((X.promptOn = ve),
@@ -362,6 +401,8 @@ function createHUD(context) {
       for (let k of Z) k.el.remove();
       Z.length = 0;
       for (let k of b) k.life = 0;
+      for (let [, k] of exposedMarks) k.el.remove();
+      exposedMarks.clear();
       ((Y = 0),
         d.classList.remove("on"),
         I.message(""),
@@ -448,7 +489,64 @@ function createHUD(context) {
           be.wEl.classList.toggle("dim", ho));
       }
     }
-        let We = Te <= 0.6 && ce.alive && ve.state !== "reloading_hidden";
+        // M3：暴露标记每帧校验 + 世界投影。
+    // 投影复用下方 J（h-wm）的相机矩阵；仅在其未执行时（J 为空或离屏）
+    // 补齐 updateMatrixWorld，避免额外开销。
+    if (exposedMarks.size) {
+      let enemies = context.enemies && context.enemies.list;
+      let exposedUpdate = false;
+      for (let [id, be] of exposedMarks) {
+        let enemy = Array.isArray(enemies)
+          ? enemies.find((z) => z.id === id)
+          : null;
+        if (!enemy || !enemy.alive || !enemy.active) {
+          be.el.remove();
+          exposedMarks.delete(id);
+          continue;
+        }
+        be.life -= k;
+        if (be.life <= 0) {
+          be.el.remove();
+          exposedMarks.delete(id);
+          continue;
+        }
+        exposedUpdate = true;
+      }
+      if (exposedUpdate) {
+        if (!J.length) {
+          _e.updateMatrixWorld();
+          _e.matrixWorldInverse.copy(_e.matrixWorld).invert();
+        }
+        // 相机矩阵已就绪（J 投影后）或刚补齐；逐标记投影
+        for (let [id, be] of exposedMarks) {
+          let enemy = Array.isArray(enemies)
+            ? enemies.find((z) => z.id === id)
+            : null;
+          if (!enemy || !enemy.pos) continue;
+          let dist = Math.hypot(
+            enemy.pos.x - ce.pos.x,
+            enemy.pos.z - ce.pos.z,
+          );
+          be.dist = dist;
+          let oEl = be.el;
+          oEl.style.opacity = String(Math.min(1, be.life / 0.4));
+          oEl
+            .querySelector("b")
+            .setAttribute("data-dist", String(Math.round(dist)) + "m");
+          oe
+            .set(enemy.pos.x, enemy.pos.y + 1.5, enemy.pos.z)
+            .project(_e);
+          if (oe.z > 1) {
+            oe.x = -oe.x;
+            oe.y = -oe.y;
+          }
+          let Os = Math.round((oe.x * 0.5 + 0.5) * ie),
+            pn = Math.round((-oe.y * 0.5 + 0.5) * F);
+          oEl.style.transform = `translate3d(${Os}px,${pn}px,0)`;
+        }
+      }
+    }
+    let We = Te <= 0.6 && ce.alive && ve.state !== "reloading_hidden";
     if (
       (We !== X.crossOn && ((X.crossOn = We), v.classList.toggle("off", !We)),
       We)

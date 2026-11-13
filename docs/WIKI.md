@@ -1,4 +1,4 @@
-﻿# Saltline 项目 Wiki
+# Saltline 项目 Wiki
 
 > 面向新加入项目的开发者、维护者与代码审查者。本文档以当前仓库实现为准，覆盖项目定位、目录结构、模块边界、关键函数契约以及逐文件说明。
 >
@@ -150,6 +150,7 @@ context.time.dt = dt; context.time.t += dt; context.time.real = performance.now(
 | `combat` | `CombatSystem` | `createCombat` | 射线命中、伤害判定 |
 | `weapon` | `WeaponSystem` | `createWeapon` | 武器状态与视图模型 |
 | `enemies` | `EnemySystem` | `createEnemies` | 敌人池、生成、射线检测 |
+| `helicopter` | `HelicopterSystem` | `createHelicopter` | 夜晴直升机光柱/音效/暴露扫描（M3），见 4.3.6 |
 | `environment` | `EnvironmentSystem` | `createEnvironment` | 时间/天气/能见度中枢，见 4.1.6 |
 | `hud` | `HUDSystem` | `createHUD` | DOM HUD |
 | `game` | `GameFlow` | `createGameFlow` | 任务状态机与菜单 |
@@ -261,8 +262,9 @@ src/
 │     ├─ surface-shaders.js      # 程序化表面生成器 GLSL 与默认表面
 │     ├─ textures.js             # 法线/粗糙度烘焙、贴花、标签、编号纹理
 │     └─ showcase.js             # 材质展示场景
-├─ world/                        # 世界构建（22）
+├─ world/                        # 世界构建（23）
 │  ├─ physics.js                 # AABB 碰撞、射线、导航网格、胶囊移动
+│  ├─ helicopter.js              # 夜晴直升机光柱、音效、暴露扫描（M3）
 │  ├─ level/                     # 关卡（3）
 │  │  ├─ level.js                # 关卡装配、目标、出生点、撤离点
 │  │  ├─ buildings.js            # 静态建筑与道具放置工具
@@ -483,7 +485,7 @@ src/
 关键调用链：
 
 1. **启动**：`game.js → register.js`（安装 builder）→ `diagnostics.js`（安装错误捕获）→ `runtime.startGame()`。
-2. **初始化**：`runtime → createRenderer → createMaterials → createPhysics/createProps/createInput → createLevel → createBackdrop → createGround → createEffects → createAudio → createPlayer/createCombat → createWeapon → createEnemies → createHUD → createGameFlow`。
+2. **初始化**：`runtime → createRenderer → createMaterials → createPhysics/createProps/createInput → createLevel → createBackdrop → createGround → createEffects → createAudio → createPlayer/createCombat → createWeapon → createEnemies → createHUD → createGameFlow → createHelicopter → createEnvironment`。
 3. **射击**：`weapon.update → combat.playerShot → physics.raycast + enemies.raycast → enemy.damage → events("enemy:hit"/"enemy:killed"/"impact") → effects/audio/hud/combat.stats`。
 4. **受击**：`enemy fire → combat.enemyShot → player.damage → events("player:hit"/"player:dead") → hud/audio/flow`。
 5. **任务**：`flow.update → 中继交互/波次/撤离 → events("objective:progress"/"objective:done"/"objective:all"/"extraction:reached") → hud/audio/menus`。
@@ -569,6 +571,7 @@ context.events（weapon:fire / impact / explosion / player:step ...）
 | `enemy:hit` | `{enemy, point, part}` | `walker`、`drone` | `audio` |
 | `enemy:killed` | `{enemy, pos, type}` | `walker`、`drone` | `combat`、`hud`、`audio` |
 | `enemy:spawn` | `{enemy}` | `enemies` | 诊断/扩展 |
+| `helicopter:spot` | `{targets: [{id}], playerExposed}` | `world/helicopter.js` | `hud`（M3 暴露标记） |
 | `enemy:alert` | `{enemy, noise?}` | `enemies` | `flow`、`audio` |
 | `enemy:telegraph` | `{enemy, ...}` | `walker`、`drone` | `audio` |
 | `enemy:fire` | `{enemy, ...}` | `walker`、`drone` | `audio` |
@@ -1540,6 +1543,40 @@ for (const c of barrel.userData.colliders) {
 - 新增道具必须同时更新 `PROP_SIZES` 与 `register.js` 的显式注册。
 - 未知道具会输出 `[props] unknown prop "<name>"` 并生成占位盒。
 
+#### 4.3.6 `createHelicopter(context)`（M3）
+
+```js
+function createHelicopter(context): HelicopterSystem;
+```
+
+| 成员 | 签名 | 说明 |
+| --- | --- | --- |
+| `enabled` | `boolean` | 由 `environment._applyStatic` 按 `target.helicopterEnabled` 控制 |
+| `active` | `boolean` | `enabled &&` 有光柱；`setEnabled(false)` 立即清除 |
+| `pos` | `Vector3` | 盘旋位置（玩家为中心，半径 `HELICOPTER_TUNING.radius`） |
+| `beam` | `{ origin, dir, halfAngle, range }` | 光柱几何（`dir` 单位向量，向下偏） |
+| `setEnabled(on)` | `void` | 立即启停：停时清光柱/音效/暴露，不等 damp |
+| `update(dt)` | `void` | 盘旋 + 光柱几何 + 音效跟踪 + 暴露扫描（0.25s，`low` 0.5s） |
+| `isInBeam(targetPos)` | `boolean` | 锥体判定（距离粗筛 0.3m 容差）→ `physics.lineOfSight` |
+| `getSpotTargets()` | `Array<{type, ref}>` | 当前帧光柱内敌人与玩家 |
+| `setModel(mesh)` | `void` | M3 占位，不接模型 |
+| `debug` | `object` | 内部状态与 `lastSpotTimes()` |
+
+事件：
+
+| 事件 | payload | 说明 |
+| --- | --- | --- |
+| `helicopter:spot` | `{ targets: [{id}], playerExposed }` | 每 0.25s 派发（含空 targets 清空信号），HUD 订阅 |
+
+渲染分级：`ultra/high`（`envVolumetricBeam=true`）锥形网格加色叠加；`medium` 半透明锥体；`low/test` 仅 `SpotLight` + 地面光斑贴花。光束 `SpotLight` 不占 `lightPool`（池中无 `SpotLight`），`castShadow=false`。
+
+注意事项：
+
+- 冻结：`game.state` 非 `playing/showcase` 时 `update` 直接返回。
+- 音效：`audio.loop("helicopter", {pos})` 每 100ms（`low` 200ms）`setPos`，音量乘 `1 - 0.3 × audioMask`（雨声掩蔽）。
+- 装配顺序：`createHelicopter` 先于 `createEnvironment`（environment 的 `applyStatic` 需要它）。
+- 失败降级：`FALLBACKS.helicopter` 提供全 noop 桩。
+
 ### 4.4 玩法（`input/player/combat/weapons/enemies`）
 
 #### 4.4.1 `createInput(context)`
@@ -1720,7 +1757,8 @@ async function createEnemies(context): Promise<EnemySystem>;
 | `raycast(origin, dir, maxDist?)` | `EnemyHit \| null` | 命中最近敌人 |
 | `aliveCount()` | `number` | 存活数量 |
 | `clear()` | `void` | 回收全部敌人 |
-| `alert(pos, radius?)` | `void` | 以噪声位置惊醒敌人 |
+| `alert(pos, radius?)` | `void` | 以噪声位置惊醒敌人（M2 起乘听觉遮蔽） |
+| `forceExpose(pos, mode, targetEnemy?)` | `void` | 信息层暴露：写 `lastKnown` + 触发 `investigate`（最短 2s），1.5s 冷却；`engage` 不降级（M3） |
 | `update(dt)` | `void` | 更新所有敌人、弹丸、残骸 |
 | `debug` | `object` | 池、网格、材质、三角形统计 |
 
@@ -2072,6 +2110,7 @@ context.game.resume();
 | 路径 | 核心职责 | 依赖 | 主要对外接口 | 设计意图 |
 | --- | --- | --- | --- | --- |
 | `world/physics.js` | AABB 列表、射线、视线、地面高度、胶囊移动、导航网格与 A* | vendor、`core/config` | `createPhysics`、`cloneVector3` | 用轻量 AABB 替代完整物理引擎，保证确定性 |
+| `world/helicopter.js` | 夜晴直升机盘旋、光柱渲染（分级）、音效跟踪、暴露扫描 | vendor、`core/{random,math,config,environment-presets}` | `createHelicopter` | 产出 `helicopter:spot`；`enabled` 由 environment 控制（M3） |
 | `world/level/level.js` | 关卡装配、中继目标、出生点、区域、室内盒、过场路径、静态合批 | vendor、`core/geometry`、`level/buildings`、`level/placement` | `createLevel`、`levelShowcaseModule`、`showcaseLevel` | 关卡数据与构建逻辑集中，便于调整布局 |
 | `world/level/buildings.js` | 建筑构建器与放置工具（盒/板/柱/杆/工字梁/楼梯/栈桥/堆叠） | vendor、`core/geometry` | `ob`、`rb`、`no`、`ab` | 提供“关卡 DSL”，让布局代码可读 |
 | `world/level/placement.js` | 线缆、地面标牌、楼梯、围栏、集装箱堆叠等摆件 | vendor、`core/geometry`、`level/buildings` | `Lr`、`lv`、`cb`、`ts`、`mt`、`hR`、`fR` | 把重复摆放模式抽成函数 |

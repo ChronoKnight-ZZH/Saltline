@@ -27,6 +27,7 @@ import { bootElement, setBootProgress } from "./boot-screen.js";
 import { enableBenchmark } from "./benchmark.js";
 import { createShowcaseInput, createShowcasePlayer } from "./showcase-stubs.js";
 import { createEnvironment } from "../core/environment.js";
+import { createHelicopter } from "../world/helicopter.js";
 import {
   DEFAULT_ENV,
   TIME_PRESETS,
@@ -209,6 +210,11 @@ async function startGame() {
       (context.game = createGameFlow(context)));
   }
   await setBootProgress("Reading the sky", 0.88);
+  // M3：helicopter 必须先于 environment 装配，否则 environment 的
+  // applyStatic 检测不到 context.helicopter，启停逻辑会被跳过。
+  await initializeSystem("helicopter", "helicopter", () =>
+    createHelicopter(context),
+  );
   await initializeSystem("environment", "environment", () =>
     createEnvironment(context),
   );

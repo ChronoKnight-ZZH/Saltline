@@ -97,3 +97,40 @@
 | URL 参数生效 | `?time=midnight&weather=heavyRain` 在启动时 `force: true` 应用 |
 | 必需性 | 缺失会导致 `runtime` 致命错误 |
 | 降级 | 无 Fallback（必需系统） |
+
+## M3 直升机系统验收（2026-11-13）
+
+新增 `world/helicopter.js`，并接入 `enemies.forceExpose`、`hud.expose`、`helicopter:spot`、`audio/library.js` 的 `helicopter` 循环音色、`environment._applyStatic` 启停与 `runtime` 装配。
+
+### 静态与构建
+
+| 项目 | 结果 |
+| --- | --- |
+| `npm run check` | 通过：69 模块语法/导入/无环检查 + `createHelicopter` 契约 + 归档与字体校验 |
+| `npm run build` | 通过：74 模块，`dist/index.html` 1,430.50 kB（gzip 441.63 kB） |
+| 归档校验 | `archive/original.html` 曾因 `core.autocrlf=true` 检出为 CRLF 导致 SHA-256 与 manifest 不符，已恢复 LF；本修改未触碰该文件 |
+
+### 无头逻辑冒烟（临时脚本，已删除）
+
+19/19 通过，覆盖：`combine` 的 `helicopterEnabled`（midnight+clear/overcast 为真，rain/非午夜为假）、启停幂等、盘旋初始位置、光柱轴线上 `isInBeam=true`、锥体外/零距离为 false、停用后立即清音效与暴露、`helicopter:spot` 事件派发。
+
+### 浏览器验收
+
+| 场景 | 预期 | 状态 |
+| --- | --- | --- |
+| `?time=midnight&weather=clear` | 直升机盘旋、光柱、旋翼音效、HUD 暴露标记 | 待人工复验 |
+| `?time=midnight&weather=heavyRain` | 无直升机（`lightning=true`） | 待人工复验 |
+| 夜间晴→雨切换 | 立即停光柱 + 停音效 + 清暴露 | 待人工复验 |
+| 敌人/玩家进入光柱 | `investigate` + HUD 标记（上限 3，1.8s） | 待人工复验 |
+| `?shot=1` 回归 | 默认 dawn/clear 无直升机，画面与 M1/M2 一致 | 待人工复验 |
+
+### 与 M3.md 的偏差记录
+
+| 偏差 | 原因 |
+| --- | --- |
+| 光束 SpotLight 独立创建，不复用 `render.lightPool` | 池内只有 `PointLight`，无 `SpotLight`；池归还后光柱会熄灭 |
+| `setModel` 留空函数而非调用 `context.scene` | M3 明确不接模型（§1.2/§3.9） |
+| `isInBeam` 距离粗筛在锥体判定之前 | 等价于方案描述，且物理上距离先筛更快 |
+| 音效 `setEnabled(false)` 用 0.12s 淡出代替硬停 | 避免 WebAudio 爆音；听觉上等同立即停止 |
+| `audio.js` 未改动 | 现状 `loop()` 句柄已有 `setPos/setGain/setPitch/stop`，无需改 |
+| runtime 装配顺序为 `helicopter` → `environment` | 保证 environment 构造时 `applyStatic` 能检测到直升机（M3.md §4.7.1 的顺序要求） |

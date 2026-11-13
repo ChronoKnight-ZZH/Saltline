@@ -13,6 +13,7 @@
 | `core/geometry.js` | 共享几何、倒角、变换、颜色、静态合批 |
 | `core/environment-presets.js` | `TIME_PRESETS`、`WEATHER_PRESETS`、`combine`、`LIGHTNING_TIMING`、`HELICOPTER_TUNING` |
 | `core/environment.js` | `createEnvironment`：时间/天气/能见度中枢，perception、visibility、set/randomize |
+| `world/helicopter.js` | `createHelicopter`（M3）：夜晴光柱、盘旋、音效、`isInBeam`、暴露扫描 |
 | `render/renderer.js` | `createRenderer`：场景、镜头、光照、resize、渲染通道 |
 | `render/sky.js`、`shadows.js`、`postprocessing.js` | 天空着色器、软阴影和后处理 |
 | `render/materials/` | `materials.js` 创建材质；`catalog.js` 定义材质数据；`surface-shaders.js` 和 `textures.js` 生成表面/纹理 |

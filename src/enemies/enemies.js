@@ -160,6 +160,7 @@ async function createEnemies(context) {
       playerSpeed: 0,
       tokens: 0,
       tokenT: -9,
+      exposeCooldown: new Map(),
       lastType: "",
       wantT: {
         gull: -9,
@@ -504,6 +505,7 @@ async function createEnemies(context) {
         for (let T of d) T.active && T._deactivate();
         for (let T of v) T.active && T._deactivate();
         ((t.length = 0), (n.length = 0), (h.tokens = 0));
+        h.exposeCooldown.clear();
         for (let T of g) T.on = !1;
         ((m.count = 0), M && M.light && (M.light.intensity = 0));
       },
@@ -534,6 +536,31 @@ async function createEnemies(context) {
               }),
             (C.mode = "investigate"),
             (C.modeT = 9 + e() * 4));
+      },
+      // M3：信息层暴露。光柱/闪电照到敌人时调用——只写 lastKnown + 触发
+      // investigate，不强制 engage（改造文档 4.5）。1.5s 冷却在敌人侧，
+      // 与 M4 闪电共享；HUD 侧另行合并（hud.expose 取 max 时间）。
+      forceExpose(pos, mode, targetEnemy) {
+        let now = h.t,
+          cooldown = 1.5,
+          targets = targetEnemy ? [targetEnemy] : t;
+        for (let enemy of targets) {
+          if (!enemy || !enemy.alive || enemy.passive) continue;
+          if (enemy.mode === "engage") {
+            // 已交战：只更新 lastKnown，不降级
+            enemy.lastKnown.copy(pos);
+            continue;
+          }
+          let last = h.exposeCooldown.get(enemy.id) || -9;
+          if (now - last < cooldown) continue;
+          h.exposeCooldown.set(enemy.id, now);
+          enemy.lastKnown.copy(pos);
+          enemy.mode = "investigate";
+          // M3.md 4.2.1：进入 investigate 后最短 2s
+          enemy.modeT = Math.max(2, enemy.modeT || 0);
+          enemy.senseT = 0;
+          context.events.emit("enemy:alert", { enemy, noise: pos });
+        }
       },
       update(T) {
         if (T <= 0) return;

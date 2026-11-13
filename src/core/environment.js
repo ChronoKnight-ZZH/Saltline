@@ -100,6 +100,15 @@ function createEnvironment(context) {
     ) {
       context.mats.uniforms.wet.value = c.wetness;
     }
+    // M3：直升机启停。变化时立即启停，不等 damp。
+    // 构造时 context.helicopter 尚未装配（runtime 顺序），这里跳过；
+    // URL 参数处理在 helicopter 装配之后（见 runtime.js），届时自动生效。
+    if (context.helicopter && context.helicopter.setEnabled) {
+      let want = !!state.target.helicopterEnabled;
+      if (context.helicopter.enabled !== want) {
+        context.helicopter.setEnabled(want);
+      }
+    }
   }
 
   function pushFrame(dt) {
@@ -208,7 +217,16 @@ function createEnvironment(context) {
 
   function update(dt) {
     pushFrame(dt);
-    // M3: context.helicopter && context.helicopter.update(dt);
+    // M3：驱动直升机（try/catch 保护，单帧异常不阻断主循环）
+    if (context.helicopter && context.helicopter.update) {
+      try {
+        context.helicopter.update(dt);
+      } catch (e) {
+        console.error(
+          "[environment] helicopter.update threw: " + (e && e.stack ? e.stack : e),
+        );
+      }
+    }
     // M4: context.lightning && context.lightning.update(dt);
   }
 
