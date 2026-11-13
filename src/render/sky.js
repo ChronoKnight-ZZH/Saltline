@@ -1,6 +1,7 @@
 import {
   BackSide,
   BoxGeometry,
+  Color,
   DataTexture,
   LinearFilter,
   Mesh,
@@ -81,7 +82,7 @@ void main(){
   vec3 hc = horizonColor(d);
   vec3 midC = mix(vec3(0.15, 0.24, 0.36), vec3(0.72, 0.50, 0.34), pow(ts, 3.0));   // pale band above the fire
   vec3 clearC = mix(hc, midC, smoothstep(0.0, 0.17, h));
-  clearC = mix(clearC, vec3(0.085, 0.145, 0.24), smoothstep(0.10, 0.5, h));
+  clearC = mix(clearC, uZen, smoothstep(0.10, 0.5, h));
   // aureole (mie glow round the sun)
   clearC += uSunCol * vec3(1.0, 0.86, 0.68) * (pow(s, 8.0) * 0.14 + pow(s, 64.0) * 0.55 + pow(s, 600.0) * 2.2 + pow(s, 6000.0) * 14.0);
 
@@ -231,4 +232,28 @@ function Vy(i, e) {
   return (n.dispose(), t.dispose(), r);
 }
 
-export { createNoiseTexture, Hy, Vy, SKY_NOISE_GLSL, SKY_COLOR_GLSL };
+// 由 environment 调用，更新天空的上半球色、地平线色、太阳色和方向。
+// 参数按 THREE.Color / THREE.Vector3 传入；undefined 字段保持原值。
+// 注意：不更新 `uZen` 以外的 shader 内部常量（如 midC / clearC 的低空色），
+// 那些属于美术风格常量，跨预设保持稳定。
+function applySkyPreset(sky, preset) {
+  const u = sky && sky.material && sky.material.uniforms;
+  if (!u) return;
+  const p = preset || {};
+  if (p.skyTop && u.uZen && u.uZen.value) u.uZen.value.copy(p.skyTop);
+  if (p.skyHorizon && u.uHor && u.uHor.value) u.uHor.value.copy(p.skyHorizon);
+  if (p.sunColor && u.uSunCol && u.uSunCol.value) u.uSunCol.value.copy(p.sunColor);
+  if (p.sunDir && u.uSunDir && u.uSunDir.value) {
+    u.uSunDir.value.copy(p.sunDir);
+    if (u.uSunDir.value.lengthSq() > 0) u.uSunDir.value.normalize();
+  }
+}
+
+export {
+  createNoiseTexture,
+  Hy,
+  Vy,
+  applySkyPreset,
+  SKY_NOISE_GLSL,
+  SKY_COLOR_GLSL,
+};

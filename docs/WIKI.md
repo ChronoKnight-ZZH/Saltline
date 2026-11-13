@@ -1,4 +1,4 @@
-# Saltline 项目 Wiki
+﻿# Saltline 项目 Wiki
 
 > 面向新加入项目的开发者、维护者与代码审查者。本文档以当前仓库实现为准，覆盖项目定位、目录结构、模块边界、关键函数契约以及逐文件说明。
 >
@@ -150,6 +150,7 @@ context.time.dt = dt; context.time.t += dt; context.time.real = performance.now(
 | `combat` | `CombatSystem` | `createCombat` | 射线命中、伤害判定 |
 | `weapon` | `WeaponSystem` | `createWeapon` | 武器状态与视图模型 |
 | `enemies` | `EnemySystem` | `createEnemies` | 敌人池、生成、射线检测 |
+| `environment` | `EnvironmentSystem` | `createEnvironment` | 时间/天气/能见度中枢，见 4.1.6 |
 | `hud` | `HUDSystem` | `createHUD` | DOM HUD |
 | `game` | `GameFlow` | `createGameFlow` | 任务状态机与菜单 |
 | `bench` | `{frame}` | `enableBenchmark` | 仅 `?bench=1` |
@@ -239,14 +240,16 @@ src/
 │  ├─ benchmark.js               # 巡游基准与帧时间面板
 │  ├─ showcases.js               # 展示模块注册表
 │  └─ showcase-stubs.js          # 展示模式用的 input/player 桩
-├─ core/                         # 基础能力（7）
+├─ core/                         # 基础能力（9）
 │  ├─ config.js                  # 世界/光照/玩家/画质常量
 │  ├─ events.js                  # 事件总线
 │  ├─ random.js                  # 可复现随机数
 │  ├─ math.js                    # clamp/lerp/saturate/smoothstep/damp
 │  ├─ quality.js                 # 画质选择
 │  ├─ fallbacks.js               # 系统降级实现
-│  └─ geometry.js                # 共享几何、合批、网格创建
+│  ├─ geometry.js                # 共享几何、合批、网格创建
+│  ├─ environment.js             # 环境状态中枢、能见度、perception
+│  └─ environment-presets.js     # TIME_PRESETS / WEATHER_PRESETS / combine
 ├─ render/                       # 渲染管线（4）
 │  ├─ renderer.js                # 场景、相机、光照、渲染通道、动态分辨率
 │  ├─ sky.js                     # 程序化天空着色器与噪声纹理
@@ -363,6 +366,8 @@ src/
 | L0 引擎 | `vendor/three-r180.js` | 无 | 全部业务模块 | 唯一 Three.js 实例来源 |
 | L1 基础设施 | `core/*` | L0 | L2 及以上 | 只提供纯函数、常量、事件、随机、几何工具 |
 | L2 渲染与世界 | `render/*`、`world/*` | L0–L1 | `input/player/combat/weapons/enemies/ui/game` | 只负责构建场景与几何，不读取输入 |
+
+> **L1.5 例外**：`core/environment.js` 可调用 L2 的 setter 接口（`render.setSun/setFog/setExposure/rebakeEnvironment`、`ground.setRain`、`mats.uniforms.wet`），但不读取玩法状态。
 | L3 玩法 | `input`、`player`、`combat`、`weapons`、`enemies` | L0–L2 | `ui`、`game/flow` | 通过 `context` 读取世界，通过 `events` 派发结果 |
 | L4 表现 | `effects`、`audio`、`ui` | L0–L3 | 不反向驱动玩法 | 订阅事件，不修改玩家/敌人核心状态 |
 | L5 编排 | `app/*`、`game/flow.js` | 全部 | — | 负责装配、状态机、菜单与帧循环 |
@@ -573,6 +578,7 @@ context.events（weapon:fire / impact / explosion / player:step ...）
 | `weapon:reload` | `{phase: "start"\|"magout"\|"magin"\|"bolt"\|"done", empty?}` | `weapon` | `audio`、`hud` |
 | `weapon:dry` | `{}` | `weapon` | `audio` |
 | `explosion` | `{pos, size}` | `effects` | `player`、`enemies`、`audio` |
+| `environment:changed` | `{timeOfDay, weather}` | `core/environment.js` | HUD、音频（M5） |
 | `objective:progress` | `{id, t}` | `flow` | `hud` |
 | `objective:done` | `{id, index, total}` | `flow` | `hud`、`audio` |
 | `objective:all` | `{}` | `flow` | `hud`、`audio` |
@@ -904,6 +910,76 @@ const crate = createMesh(
 - `mergeGeometryParts` 会补齐 `uv/normal/color`，并裁剪非标准属性，适合合批前的清理。
 - `batchStaticMeshes` 会跳过 `userData.noMerge` 子树、`SkinnedMesh`、`InstancedMesh` 与多材质 Mesh；这些对象会保留世界变换后单独挂载。
 - 合批按“材质 UUID + 投影/接收阴影 + layer”分组，改变这些属性会拆成不同批次。
+
+
+#### 4.1.6 `createEnvironment(context)`
+
+```js
+function createEnvironment(context): EnvironmentSystem;
+```
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `context` | `Context` | 运行时容器；需要 `render`、`ground`、`mats` 已可用 |
+
+返回的系统对象：
+
+```ts
+interface EnvironmentSystem {
+  timeOfDay: string;            // "dawn" | "morning" | "noon" | "dusk" | "night" | "midnight"
+  weather: string;              // "clear" | "cloudy" | "overcast" | "lightRain" | "heavyRain" | "storm" | "fog"
+  wetness: number;              // 0..1 全局湿润度
+  perception: number;           // 0..1 玩家感知度（敌人警觉加成）
+  visibility: number;           // 0..1 能见度（敌人视距倍率）
+  fog: number;                  // 当前雾浓度（与 FOG_K 结合）
+  sunIntensity: number;         // 当前太阳强度
+  sunColor: Color;              // 当前太阳颜色
+  ambientIntensity: number;     // 当前环境光强度
+  envExposure: number;          // 当前曝光
+  set(time?: string, weather?: string, options?: { force?: boolean; emit?: boolean }): void;
+  randomize(options?: { timeOfDay?: string[]; weather?: string[] }): void;
+  pushFrame(dt: number): void;  // 每帧更新与渐变写入
+  apply(): void;                // 立即把当前状态写入 render/ground/mats
+  onChange(cb: (env: EnvironmentSystem) => void): () => void;
+}
+```
+
+| 成员 | 类型/签名 | 说明 |
+| --- | --- | --- |
+| `TIME_PRESETS` | `Record<string, TimePreset>` | 见 `environment-presets.js`；每个预设含 `sunColor/sunIntensity/ambient/skyColor/fogDensity/exposure/zenith` |
+| `WEATHER_PRESETS` | `Record<string, WeatherPreset>` | 每个预设含 `wetness/perception/visibility/fogAdd/rain/ambientMul` |
+| `FOG_K` | `number` | 雾浓度系数；默认约 `9.1e-5` |
+| `set(time, weather, { force, emit })` | `void` | 切换预设；默认渐变，`force: true` 立即应用；`emit: false` 时不派发 `environment:changed` |
+| `randomize(options)` | `void` | 从给定数组（或全部）随机选 time/weather |
+| `pushFrame(dt)` | `void` | 每帧由 runtime 调用，做湿度/能见度渐变、雷雨计时、直升机调度 |
+| `apply()` | `void` | 立即写入 `render.setSun/setFog/setExposure/rebakeEnvironment`、`ground.setRain`、`mats.uniforms.wet` |
+| `onChange(cb)` | `() => void` | 订阅 `environment:changed`，返回取消函数 |
+
+示例：
+
+```js
+const env = createEnvironment(context);
+env.set("dawn", "lightRain");
+env.set("midnight", "heavyRain", { force: true });
+env.randomize({ weather: ["clear", "cloudy", "fog"] });
+console.log("visibility", env.visibility, "wetness", env.wetness);
+```
+
+`context.params` 支持的 URL 参数：
+
+| 参数 | 示例 | 作用 |
+| --- | --- | --- |
+| `time` | `?time=midnight` | 固定时间预设，启动时强制应用 |
+| `weather` | `?weather=heavyRain` | 固定天气预设，启动时强制应用 |
+
+注意事项：
+
+- `createEnvironment` 是必需系统；失败会导致 runtime 致命错误。
+- 初始化顺序位于 `render → mats → ground → environment → ...`，确保 `apply()` 时表现层已就绪。
+- 调用方不读取玩法状态，保持 L1.5 边界。
+- `apply()` 会调用 `render.rebakeEnvironment()`，在 `?q=low` 下 rebake 为空操作，`__G.render.env` 保持启动值。
+- `combine(timePreset, weatherPreset)` 是纯函数，合并两个预设的覆盖项（雾相加、颜色插值、强度相乘），不修改环境状态。
+- `LIGHTNING_TIMING` 控制雷雨内击闪间隔与持续时间；`HELICOPTER_TUNING` 控制暴雨时直升机巡逻的 spawn 概率与参数。
 
 ### 4.2 装配与渲染（`app/`、`render/`）
 
@@ -1974,6 +2050,8 @@ context.game.resume();
 | `core/quality.js` | 画质预设选择 | `core/config` | `chooseQuality(name)` | 依据设备能力自动降级 |
 | `core/fallbacks.js` | 非核心系统降级实现 | vendor | `FALLBACKS`、`noop` | 单系统失败不阻断启动 |
 | `core/geometry.js` | 共享几何、UV 校正、变换、合并、静态合批、网格创建 | vendor | `boxGeometry`、`beveledBoxGeometry`、`cylinderGeometry`、`tubeGeometry`、`transformGeometry`、`colorGeometry`、`mergeGeometries`、`mergeGeometryParts`、`batchStaticMeshes`、`createMesh`、`mergeAttributes` | 统一 UV 尺度与合批规则，减少重复几何代码 |
+| `core/environment-presets.js` | 时间/天气预设、combine 纯函数、LIGHTNING_TIMING、HELICOPTER_TUNING | vendor、`core/config` | `TIME_PRESETS`、`WEATHER_PRESETS`、`DEFAULT_ENV`、`FOG_K`、`combine`、`LIGHTNING_TIMING`、`HELICOPTER_TUNING` | 数据与状态中枢分离，便于调参 |
+| `core/environment.js` | 状态中枢、能见度模型、perception、表现写入 | `core/{random,math,environment-presets}`、`context.render/ground/mats` | `createEnvironment` | 唯一环境状态源，驱动渲染/地面/材质 |
 
 ### 5.4 渲染（`src/render/`）
 
@@ -2115,6 +2193,8 @@ npm run verify:refactor# 迁移等价性审计（有意改玩法后预期失败�
 | 调整关卡布局 | `world/level/level.js`、`placement.js` | 中继/出生点/掩体坐标 |
 | 调整地表观感 | `world/ground/*`、`render/materials/*` | 纹理生成与 uniform |
 | 调整天空/光照 | `core/config.js`、`render/sky.js` | `SKY_COLORS`、`SUN_LIGHT` |
+| 调整时间天气 | `core/environment-presets.js` | `TIME_PRESETS`、`WEATHER_PRESETS`、`FOG_K` |
+| 调整能见度/暴露 | `core/environment.js` | `visibility`、`perception`、`pushFrame` |
 
 ### 6.3 新增道具检查清单
 

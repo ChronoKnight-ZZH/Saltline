@@ -26,6 +26,12 @@ import { showFatalError } from "./diagnostics.js";
 import { bootElement, setBootProgress } from "./boot-screen.js";
 import { enableBenchmark } from "./benchmark.js";
 import { createShowcaseInput, createShowcasePlayer } from "./showcase-stubs.js";
+import { createEnvironment } from "../core/environment.js";
+import {
+  DEFAULT_ENV,
+  TIME_PRESETS,
+  WEATHER_PRESETS,
+} from "../core/environment-presets.js";
 
 async function startGame() {
   let params = Object.fromEntries(new URLSearchParams(location.search)),
@@ -202,6 +208,32 @@ async function startGame() {
       await initializeSystem("hud", "hud", () => createHUD(context)),
       (context.game = createGameFlow(context)));
   }
+  await setBootProgress("Reading the sky", 0.88);
+  await initializeSystem("environment", "environment", () =>
+    createEnvironment(context),
+  );
+  if (params.time || params.weather) {
+    let timeValid = params.time && TIME_PRESETS[params.time],
+      weatherValid = params.weather && WEATHER_PRESETS[params.weather];
+    if (timeValid || weatherValid) {
+      // 显式参数即使等于默认也 force 应用，避免“指定了晴天却还是湿的”歧义
+      context.environment.set(
+        {
+          timeOfDay: timeValid ? params.time : undefined,
+          weather: weatherValid ? params.weather : undefined,
+        },
+        true,
+      );
+    } else {
+      context.environment.set(DEFAULT_ENV, true);
+    }
+  } else if (params.shot || params.bench) {
+    // 幂等：environment 构造时已是 DEFAULT_ENV，set 不触发 applyStatic，
+    // wetApplied 保持 false，mats.uniforms.wet 保持 1，截图与原版一致。
+    context.environment.set(DEFAULT_ENV);
+  } else {
+    context.environment.randomize();
+  }
   await setBootProgress("Waiting for first light", 0.92);
   try {
     await context.render.onLevelReady();
@@ -241,7 +273,10 @@ async function startGame() {
       bootElement.hidden = !0;
     }, 700));
   let previousFrameTime = performance.now(),
-    weaponWetness = 1,
+    weaponWetness =
+      context.environment && typeof context.environment.wetness === "number"
+        ? context.environment.wetness
+        : 1,
     updateSystem = (h, f) => {
       let p = context[h];
       if (p && p.update)
@@ -279,6 +314,7 @@ async function startGame() {
           ((updateSystem.err.game = 1),
           console.error("[loop] game.update threw: " + ((v && v.stack) || v)));
       }
+      updateSystem("environment", p);
       if (showcaseName) {
         if (context.showcaseInfo.update)
           try {
@@ -310,8 +346,13 @@ async function startGame() {
             g.z > v.min.z &&
             g.z < v.max.z &&
             g.y < v.max.y;
+        let envWet =
+          context.environment && typeof context.environment.wetness === "number"
+            ? context.environment.wetness
+            : 1;
         weaponWetness +=
-          ((x ? 0.3 : 1) - weaponWetness) * Math.min(1, p * (x ? 0.25 : 0.6));
+          ((x ? envWet * 0.3 : envWet) - weaponWetness) *
+          Math.min(1, p * (x ? 0.25 : 0.6));
         try {
           context.weapon.setWetness(weaponWetness);
         } catch {}

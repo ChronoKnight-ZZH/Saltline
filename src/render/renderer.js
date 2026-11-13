@@ -5,6 +5,7 @@ import {
   CubeCamera,
   DepthTexture,
   DirectionalLight,
+  FogExp2, 
   Group,
   HalfFloatType,
   LinearFilter,
@@ -41,7 +42,7 @@ import {
   boxGeometry,
   createMesh,
 } from "../core/geometry.js";
-import { Hy, Vy, createNoiseTexture } from "./sky.js";
+import { Hy, Vy, applySkyPreset, createNoiseTexture } from "./sky.js";
 import { Gy, Xy, Yy, installSoftShadows } from "./shadows.js";
 import {
   POSTPROCESS_SHADER_MARKER,
@@ -421,6 +422,54 @@ async function createRenderer(context) {
       sun: h,
       sky: u.mesh,
       sunDir: SUN_LIGHT.dir.clone(),
+      // ---- environment 接口（M1） ----
+      setSun(preset) {
+        if (!preset) return;
+        if (preset.sunDir) {
+          N.sunDir.copy(preset.sunDir);
+          if (N.sunDir.lengthSq() > 0) N.sunDir.normalize();
+        }
+        if (preset.sunColor) h.color.copy(preset.sunColor);
+        if (typeof preset.sunIntensity === "number") {
+          h.intensity = preset.sunIntensity;
+        }
+        // M1 不移动 h.position、不重拟合阴影；阴影方向保持启动时状态，
+        // M3/M6 再接 shadows.refit()。
+        applySkyPreset(u.mesh, {
+          skyTop: preset.skyTop,
+          skyHorizon: preset.skyHorizon,
+          sunColor: preset.sunColor,
+          sunDir: preset.sunDir ? N.sunDir : undefined,
+        });
+      },
+      setSkyColors(skyTop, skyHorizon) {
+        applySkyPreset(u.mesh, { skyTop, skyHorizon });
+      },
+      setFog(color, density) {
+        if (!r.fog) {
+          r.fog = new FogExp2(color, density);
+        } else {
+          r.fog.color.copy(color);
+          r.fog.density = density;
+        }
+      },
+      setExposure(v) {
+        N.exposure = v;
+      },
+      rebakeEnvironment() {
+        if (!context.quality || context.quality.envBake === false) return;
+        try {
+          let rt = Vy(n, u);
+          N.env = rt.texture;
+          r.environment = rt.texture;
+          r.environmentIntensity = Jy;
+        } catch (ie) {
+          console.error(
+            "[render] rebakeEnvironment failed: " + ((ie && ie.stack) || ie),
+          );
+        }
+      },
+      // ---- environment 接口结束 ----
       lightPool: x,
       post: {
         damage: 0,

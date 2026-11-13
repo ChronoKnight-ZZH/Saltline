@@ -12,6 +12,8 @@ var FALLBACKS = {
     update: noop,
     wetnessAt: () => 0.5,
     isPuddle: () => !1,
+    setRain: noop,
+    rainLevel: 0,
   }),
   backdrop: () => ({
     stub: !0,
@@ -61,6 +63,7 @@ var FALLBACKS = {
     update: noop,
     reset: noop,
     setVisible: noop,
+    setWetness: noop,
     ammo: 30,
     magSize: 30,
     reserve: 120,
@@ -87,6 +90,40 @@ var FALLBACKS = {
     message: noop,
     hitmarker: noop,
   }),
+  environment: () => {
+    let visibility = {
+        base: 200,
+        current: 200,
+        lightningPeak: 0,
+        lightningT: 0,
+      },
+      perception = {
+        visibility: 200,
+        visualAlert: 1,
+        audioMask: 0,
+        spreadScale: 1,
+        footstepMaskAt: () => 0,
+      };
+    return {
+      stub: !0,
+      timeOfDay: "dawn",
+      weather: "clear",
+      update: noop,
+      setTimeOfDay: noop,
+      setWeather: noop,
+      set: noop,
+      randomize: noop,
+      perception,
+      visibility,
+      get wetness() {
+        return 0;
+      },
+      _applyStatic: noop,
+      _pushFrame: noop,
+      _onLightningFlash: noop,
+      _updateHelicopter: noop,
+    };
+  },
   mats: () => {
     let i = new Map();
     return {

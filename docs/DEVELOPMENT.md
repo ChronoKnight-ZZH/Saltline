@@ -11,6 +11,8 @@
 | `core/config.js` | `WORLD_BOUNDS`、`SUN_LIGHT`、`SKY_COLORS`、`PLAYER_DIMENSIONS`、`QUALITY_PRESETS` |
 | `core/events.js`、`random.js`、`math.js` | `createEventBus`、`createRandom`、`clamp`、`lerp`、`smoothstep`、`damp` |
 | `core/geometry.js` | 共享几何、倒角、变换、颜色、静态合批 |
+| `core/environment-presets.js` | `TIME_PRESETS`、`WEATHER_PRESETS`、`combine`、`LIGHTNING_TIMING`、`HELICOPTER_TUNING` |
+| `core/environment.js` | `createEnvironment`：时间/天气/能见度中枢，perception、visibility、set/randomize |
 | `render/renderer.js` | `createRenderer`：场景、镜头、光照、resize、渲染通道 |
 | `render/sky.js`、`shadows.js`、`postprocessing.js` | 天空着色器、软阴影和后处理 |
 | `render/materials/` | `materials.js` 创建材质；`catalog.js` 定义材质数据；`surface-shaders.js` 和 `textures.js` 生成表面/纹理 |
@@ -70,7 +72,9 @@ window.__stats();  // 渲染统计、FPS、游戏状态
 window.__G;        // 运行中的游戏上下文
 ```
 
-`__G` 包含 `game`、`player`、`weapon`、`enemies`、`level`、`render`、`audio`、`physics`、`input`、`events` 等对象。不要将它们作为新的持久存储格式。
+`__G` 包含 `game`、`player`、`weapon`、`enemies`、`level`、`render`、`audio`、`physics`、`input`、`events`、`environment` 等对象。不要将它们作为新的持久存储格式。
+
+`window.__G.environment` 可用，含 `timeOfDay`、`weather`、`wetness`、`perception`、`visibility`、`set`、`randomize`。
 
 ## 原版调试参数
 
@@ -83,6 +87,8 @@ window.__G;        // 运行中的游戏上下文
 | `/?noaudio=1` | 禁用声音模块 |
 | `/?bench=1` | 原版巡游基准和帧时间面板 |
 | `/?shot=1&q=test&seed=4207&dt=0&noaudio=1&cam=-32,1.68,6,0,1.68,6` | 本次回归使用的固定时间、种子、镜头场景 |
+| `/?time=midnight&weather=heavyRain` | 固定时间/天气（M1 起） |
+| `/?time=dawn&weather=clear` | 显式默认组合，`force: true` 应用 |
 
 首次启动的画质也会受到已保存设置影响；验收时应同时记录 URL 和设置。不同机器的 GPU 性能不能直接比较。
 

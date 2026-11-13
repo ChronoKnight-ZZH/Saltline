@@ -15,8 +15,10 @@ var SUN_LIGHT = {
   intensity: 9,
 };
 
+// `zenith` 必须与 sky.js shader 中 `clearC` 使用的颜色一致，
+// 否则把硬编码 zenith 换成 `uZen` 时会产生视觉差异。
 var SKY_COLORS = {
-  zenith: new Color(0.055, 0.085, 0.13),
+  zenith: new Color(0.085, 0.145, 0.24),
   horizon: new Color(0.95, 0.55, 0.28),
   horizonAway: new Color(0.16, 0.22, 0.3),
   fog: new Color(0.42, 0.47, 0.52),
@@ -35,6 +37,10 @@ var vf = 0;
 
 var zc = 1;
 
+// envBake              PMREM 重烘焙是否允许（low 跳过）
+// envVolumetricBeam    光柱体积渲染是否允许（M3 使用；ultra/high 才开）
+// envRainParticles     雨幕粒子预算（M5 使用；low 为全量的一半）
+// envFlash             闪电全屏 flash 是否允许（M4 使用；low 关闭）
 var QUALITY_PRESETS = {
   test: {
     name: "test",
@@ -48,6 +54,10 @@ var QUALITY_PRESETS = {
     bloom: !0,
     motionBlur: !1,
     rain: 0.4,
+    envBake: !0,
+    envVolumetricBeam: !1,
+    envRainParticles: 1600,
+    envFlash: !0,
   },
   low: {
     name: "low",
@@ -61,6 +71,10 @@ var QUALITY_PRESETS = {
     bloom: !0,
     motionBlur: !1,
     rain: 0.5,
+    envBake: !1,
+    envVolumetricBeam: !1,
+    envRainParticles: 2000,
+    envFlash: !1,
   },
   medium: {
     name: "medium",
@@ -74,6 +88,10 @@ var QUALITY_PRESETS = {
     bloom: !0,
     motionBlur: !1,
     rain: 0.8,
+    envBake: !0,
+    envVolumetricBeam: !1,
+    envRainParticles: 3000,
+    envFlash: !0,
   },
   high: {
     name: "high",
@@ -87,6 +105,10 @@ var QUALITY_PRESETS = {
     bloom: !0,
     motionBlur: !0,
     rain: 1,
+    envBake: !0,
+    envVolumetricBeam: !0,
+    envRainParticles: 4000,
+    envFlash: !0,
   },
   ultra: {
     name: "ultra",
@@ -100,6 +122,10 @@ var QUALITY_PRESETS = {
     bloom: !0,
     motionBlur: !0,
     rain: 1,
+    envBake: !0,
+    envVolumetricBeam: !0,
+    envRainParticles: 5000,
+    envFlash: !0,
   },
 };
 

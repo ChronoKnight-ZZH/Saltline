@@ -53,3 +53,47 @@
 ## 验收范围
 
 本次完成启动、基本键盘操作、UI 和构建烟测，没有通关三中继任务，也没有验证移动设备、实体手柄和不同浏览器。内嵌测试浏览器未提供鼠标捕获，已使用原版提供的方向键/Enter 替代操作验证转向和射击；独立 Chrome 中的 Pointer Lock 尚未单独测试。音频验证到 AudioContext 启动，未进行听觉品质评估。
+
+## M1 环境系统验收（2026-11-13）
+
+新增 `core/environment.js` 与 `core/environment-presets.js`，提供时间/天气/能见度中枢。以下截图与改造前对比均使用同一 `?shot=1&q=test&seed=4207&dt=0&noaudio=1&cam=-32,1.68,6,0,1.68,6` URL。
+
+### shot 模式默认环境对比
+
+| 项目 | 结果 |
+| --- | --- |
+| 天空 | `uZen` 已对齐 shader 原常量，无差异 |
+| 太阳色/强度 | `DEFAULT_ENV = dawn` 复用 `SUN_LIGHT`，无差异 |
+| 雾 | `fogDensity ≈ 9.1e-5`，不可见，无差异 |
+| 曝光 | `exposure = 1.0`，无差异 |
+| 地面湿度 | `wetApplied = false`，`mats.uniforms.wet` 保持 1，无差异 |
+| 武器湿度 | `weaponWetness` 初始值取自 `environment.wetness`（1），无差异 |
+
+### 时间/天气模式截图
+
+使用 `?time=midnight&weather=heavyRain` 启动：
+
+- 天空变暗（zenith 低亮度）
+- 雾浓度显著升高（`FOG_K` 叠加 heavyRain.fogAdd）
+- 地面雨量上升（`ground.setRain(0.9+)`）
+- 地面湿度上升（`environment.wetness ≈ 0.85`）
+- 武器视图模型湿度同步上升
+- `ambientIntensity` 降低，整体氛围变暗
+- `environment:changed` 事件派发成功，HUD 与音频表现正常
+
+### 画质降级验证
+
+使用 `?q=low` 启动，调用 `__G.environment.apply()`：
+
+- `render.rebakeEnvironment()` 在 low 画质下为空操作（不重建 PMREM）
+- `__G.render.env` 保持启动时的默认环境贴图
+- 其他 setter（`setFog`/`setSun`/`setExposure`/`setRain`/`wetness`）均正常生效
+
+### 初始化顺序与错误处理
+
+| 项目 | 结果 |
+| --- | --- |
+| 初始化位置 | `ground` 之后、`effects` 之前 |
+| URL 参数生效 | `?time=midnight&weather=heavyRain` 在启动时 `force: true` 应用 |
+| 必需性 | 缺失会导致 `runtime` 致命错误 |
+| 降级 | 无 Fallback（必需系统） |
