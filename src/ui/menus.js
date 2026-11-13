@@ -141,6 +141,8 @@ function createMenus(context, e) {
         <div class="row"><label id="l-inv">Invert Y</label><button class="toggle" data-act="invert" aria-labelledby="l-inv" aria-pressed="false"><i></i><span>Off</span></button></div>
         <div class="row"><label for="s-vol">Master volume</label><div class="slider"><input id="s-vol" type="range" min="0" max="100" step="1"><output data-o="vol"></output></div></div>
         <div class="row"><label for="s-fov">Field of view</label><div class="slider"><input id="s-fov" type="range" min="60" max="95" step="1"><output data-o="fov"></output></div></div>
+        <div class="row"><label for="s-env-time">Time of day</label><select id="s-env-time" class="sel" data-env="timeOfDay"><option value="dawn">Dawn</option><option value="noon">Noon</option><option value="dusk">Dusk</option><option value="midnight">Midnight</option></select></div>
+        <div class="row"><label for="s-env-weather">Weather</label><select id="s-env-weather" class="sel" data-env="weather"><option value="clear">Clear</option><option value="overcast">Overcast</option><option value="lightRain">Light rain</option><option value="heavyRain">Heavy rain</option></select></div>
         <div class="row" data-row="fs"><label id="l-fs">Display</label><button class="btn small" data-act="fullscreen" aria-labelledby="l-fs fs-t"><span id="fs-t">Enter fullscreen</span></button></div>
         <p class="panel-note" data-f="qnote"></p>
       </div>
@@ -167,6 +169,8 @@ function createMenus(context, e) {
     p = "none",
     d = null;
   function v(U) {
+    // 注意：不处理 timeOfDay/weather——环境状态不持久化，由 createMenus 内的
+    // syncEnvSelects 与 environment:changed 独立管理。
     if (
       ((!U || U === "sens") && (context.input.sensitivity = n.sens),
       (!U || U === "invertY") && (context.input.invertY = n.invertY),
@@ -236,6 +240,34 @@ function createMenus(context, e) {
     f.addEventListener("input", () => {
       ((n.fov = +f.value), v("fov"), g(), saveSettings(n));
     }));
+    // M2：时间/天气下拉。从 environment 读当前值，不写 settings，不持久化。
+  let envTimeSel = o('select[data-env="timeOfDay"]'),
+    envWeatherSel = o('select[data-env="weather"]');
+  function syncEnvSelects() {
+    if (!context.environment) return;
+    if (envTimeSel && context.environment.timeOfDay) {
+      envTimeSel.value = context.environment.timeOfDay;
+    }
+    if (envWeatherSel && context.environment.weather) {
+      envWeatherSel.value = context.environment.weather;
+    }
+  }
+  if (envTimeSel) {
+    envTimeSel.addEventListener("change", () => {
+      if (!context.environment) return;
+      context.environment.setTimeOfDay(envTimeSel.value);
+      context.events.emit("ui:click", {});
+    });
+  }
+  if (envWeatherSel) {
+    envWeatherSel.addEventListener("change", () => {
+      if (!context.environment) return;
+      context.environment.setWeather(envWeatherSel.value);
+      context.events.emit("ui:click", {});
+    });
+  }
+  context.events.on("environment:changed", syncEnvSelects);
+  syncEnvSelects();
   let x = o('[data-row="fs"]'),
     y = o("#fs-t"),
     b = () =>
@@ -339,7 +371,7 @@ function createMenus(context, e) {
           (S(), U.stopPropagation(), U.preventDefault()),
         U.code === "Tab" && !a.hidden)
       ) {
-        let T = [...a.querySelectorAll("button, input")].filter(
+        let T = [...a.querySelectorAll("button, input, select")].filter(
           (G) => G.offsetParent !== null,
         );
         if (!T.length) return;

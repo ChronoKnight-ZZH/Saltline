@@ -540,14 +540,21 @@ async function createWeapon(context) {
     dt = new gi(),
     xe = new gi(),
     Ie = new gi();
-  function Be() {
+    function Be() {
     let Me = context.player,
       we = context.camera;
     (ve.ammo--,
       k.burst++,
       (k.lastShot = k.t),
       (k.heat = Math.min(1.3, k.heat + 0.05)));
-    let be = ve.spread,
+    // M2：环境扩散倍率。ve.spread 是“基础扩散”（HUD/调试读取），
+    // 环境倍率只作用于弹道，不写回 ve.spread，避免准星与实际弹道不一致。
+    let envSpreadScale =
+        (context.environment &&
+          context.environment.perception &&
+          context.environment.perception.spreadScale) ||
+        1,
+      be = ve.spread * envSpreadScale,
       Oe = ae() * Math.PI * 2,
       pt = Math.tan(be) * Math.sqrt(ae());
     (ze

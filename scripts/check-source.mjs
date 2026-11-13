@@ -77,8 +77,10 @@ function assertEnvironmentContracts(graph) {
   for (const [relPath, names] of Object.entries(EXPECTED_IMPORTS)) {
     const [, mod] = findModule(graph, relPath);
     if (!mod) continue;
-    const imports = readNameSet(mod.imports);
-    if (!imports) continue;
+    // mod.imports is [{ target, names[] }, ...] — flatten all named imports
+    const imports = new Set(
+      (mod.imports || []).flatMap((d) => d.names || []),
+    );
     for (const name of names) {
       if (!imports.has(name)) {
         problems.push(`${relPath} missing import "${name}"`);

@@ -448,12 +448,20 @@ function createHUD(context) {
           be.wEl.classList.toggle("dim", ho));
       }
     }
-    let We = Te <= 0.6 && ce.alive && ve.state !== "reloading_hidden";
+        let We = Te <= 0.6 && ce.alive && ve.state !== "reloading_hidden";
     if (
       (We !== X.crossOn && ((X.crossOn = We), v.classList.toggle("off", !We)),
       We)
     ) {
-      let we = typeof ve.spread == "number" ? ve.spread : 0.012,
+      // M2：准星间距与实际弹道一致。weapon.js#Be() 用
+      // ve.spread * perception.spreadScale 算弹道，这里必须同步，
+      // 否则 heavyRain 下准星比实际弹道紧 15%。
+      let spreadScale =
+          (context.environment &&
+            context.environment.perception &&
+            context.environment.perception.spreadScale) ||
+          1,
+        we = (typeof ve.spread == "number" ? ve.spread : 0.012) * spreadScale,
         be = (_e.fov * Math.PI) / 360,
         Oe =
           (Math.tan(we) / Math.tan(be)) * (F / 2) + 4 + (ce.sprinting ? 10 : 0);

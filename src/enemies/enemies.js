@@ -47,6 +47,14 @@ var ENEMY_TUNING = {
 };
 
 var BC = Math.cos(((ENEMY_TUNING.sightCone / 2) * Math.PI) / 180);
+// M2：视觉半径 = min(perception.visibility, baseRadius * perception.visualAlert)。
+// engage 状态不应用该限制（见 think()），保证已交战的敌人不会因玩家躲进雨/雾就脱战，
+// 这是 M3/M4 暴露系统状态机稳定性的前置。
+function effectiveSightRadius(context, baseRadius) {
+  const p = context.environment && context.environment.perception;
+  if (!p) return baseRadius;
+  return Math.min(p.visibility, baseRadius * p.visualAlert);
+}
 
 var oM = new Vector3();
 
@@ -187,7 +195,7 @@ async function createEnemies(context) {
           T.los = !1;
           return;
         }
-        if (((T.senseT -= D), T.senseT <= 0)) {
+                if (((T.senseT -= D), T.senseT <= 0)) {
           T.senseT = 0.11 + e() * 0.08;
           let j = !1;
           if (G.alive !== !1) {
@@ -195,8 +203,12 @@ async function createEnemies(context) {
               Q = N.x - T.sensor.x,
               K = N.y - T.sensor.y,
               ie = N.z - T.sensor.z,
-              F = Math.hypot(Q, K, ie);
-            if (F < ENEMY_TUNING.sightRange) {
+              F = Math.hypot(Q, K, ie),
+              sightR =
+                T.mode === "engage"
+                  ? ENEMY_TUNING.sightRange
+                  : effectiveSightRadius(context, ENEMY_TUNING.sightRange);
+            if (F < sightR) {
               let X = Math.hypot(Q, ie) || 1e-4,
                 ne = (Q * T.fwd.x + ie * T.fwd.z) / X;
               (T.mode === "engage" || ne > BC || F < 3.5) &&
@@ -495,12 +507,24 @@ async function createEnemies(context) {
         for (let T of g) T.on = !1;
         ((m.count = 0), M && M.light && (M.light.intensity = 0));
       },
-      alert(T, D = 40) {
+            alert(T, D = 40) {
+        // M2：听觉遮蔽。audioMask ∈ [0, 1]，heavyRain = 0.72，lightRain = 0.5。
+        // 上限 0.9 防止未来某天气 audioMask = 1 时半径归零。
+        let mask = Math.min(
+            0.9,
+            (context.environment &&
+              context.environment.perception &&
+              context.environment.perception.audioMask) ||
+              0,
+          ),
+          effD = D * (1 - mask);
+        if (effD <= 0) return;
+        let effSq = effD * effD;
         for (let C of t)
           !C.alive ||
             C.passive ||
             C.mode === "engage" ||
-            C.pos.distanceToSquared(T) > D * D ||
+            C.pos.distanceToSquared(T) > effSq ||
             (C.lastKnown.copy(T),
             (C.lastKnown.y = Math.max(0, T.y - 1.6)),
             C.mode === "patrol" &&
