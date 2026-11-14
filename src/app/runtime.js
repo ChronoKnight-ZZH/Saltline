@@ -30,6 +30,7 @@ import { createEnvironment } from "../core/environment.js";
 import { createHelicopter } from "../world/helicopter.js";
 import { createLightning } from "../effects/lightning.js";
 import { createSolarFlare } from "../effects/solarflare.js";
+import { createEnemyOutline } from "../render/enemy-outline.js";
 import {
   DEFAULT_ENV,
   TIME_PRESETS,
@@ -226,6 +227,13 @@ async function startGame() {
   await initializeSystem("environment", "environment", () =>
     createEnvironment(context),
   );
+  // 敌人红色轮廓（inverted hull）：依赖 enemies.list 与 context.camera，
+  // 失败不阻断游戏。
+  try {
+    context.outline = createEnemyOutline(context);
+  } catch (e) {
+    console.error("[outline] init failed", e);
+  }
   if (params.time || params.weather) {
     let timeValid = params.time && TIME_PRESETS[params.time],
       weatherValid = params.weather && WEATHER_PRESETS[params.weather];
@@ -344,7 +352,8 @@ async function startGame() {
         d &&
           (updateSystem("player", p),
           updateSystem("weapon", p),
-          updateSystem("enemies", p));
+          updateSystem("enemies", p),
+          updateSystem("outline", p));
       if (
         context.weapon &&
         context.weapon.setWetness &&
