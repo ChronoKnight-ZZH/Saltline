@@ -1414,6 +1414,285 @@ kbd {
   color: var(--signal);
 }
 
+/* ---- briefing screen (M5) ---- */
+/* 部署前的任务配置选择：4 张 lane 卡片（纯 CSS 动画）+ 台词 + REROLL/DEPLOY。 */
+.menu[data-screen="briefing"] .m-veil {
+  background: rgba(6, 8, 10, 0.86);
+}
+.m-briefing {
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 2.6vh, 30px);
+  overflow: auto;
+  padding: calc(clamp(14px, 5.5vh, 52px) + var(--sat) + 16px)
+    max(var(--gr), 4.5vw)
+    calc(clamp(14px, 5.5vh, 52px) + var(--sab) + 16px)
+    max(var(--gl), 5.5vw);
+}
+.menu[data-screen="briefing"] .m-briefing {
+  display: flex;
+}
+.mb-head {
+  text-align: center;
+}
+.mb-h {
+  font: 900 clamp(26px, 4.6vw, 52px)/0.92 var(--f-display) !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 8px 0 0 !important;
+}
+.mb-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(8px, 1.2vw, 16px);
+  width: min(1100px, 100%);
+}
+.lane-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(11, 13, 15, 0.6);
+  border: 1px solid var(--line);
+  color: var(--bone);
+  font: 600 15px/1.2 var(--f-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
+}
+.lane-btn:hover {
+  border-color: var(--bone);
+  background: rgba(232, 228, 218, 0.06);
+}
+.lane-btn[aria-pressed="true"] {
+  border-color: var(--signal);
+  background: rgba(255, 179, 71, 0.08);
+}
+.lane-btn b {
+  font: 700 19px/1 var(--f-display);
+  letter-spacing: 0.06em;
+}
+.lane-btn span {
+  font: 400 11px/1.35 var(--f-mono);
+  letter-spacing: 0.04em;
+  color: var(--bone-dim);
+  text-transform: none;
+}
+.lane-anim {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+/* recon：太阳脉动 + 敌人巡逻 */
+.lane-recon {
+  background: linear-gradient(180deg, #b8c8d8 0%, #e8eef2 70%);
+}
+.lane-recon .la-sun {
+  position: absolute;
+  top: 8%;
+  left: 10%;
+  width: 18%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffe8a0 0%, #ffb040 70%, transparent 100%);
+  animation: lane-sun 2.4s ease-in-out infinite;
+}
+.lane-recon .la-enemy {
+  position: absolute;
+  bottom: 12%;
+  width: 6%;
+  height: 20%;
+  background: #2a3440;
+  border-radius: 2px;
+}
+.lane-recon .la-enemy.e1 {
+  left: 70%;
+  animation: lane-patrol 3.6s ease-in-out infinite;
+}
+.lane-recon .la-enemy.e2 {
+  left: 82%;
+  animation: lane-patrol 3.6s ease-in-out infinite -1.2s;
+}
+@keyframes lane-sun {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+@keyframes lane-patrol {
+  0%,
+  100% {
+    transform: translateX(-6px);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+
+/* assault：雨丝 + 闪电白闪 */
+.lane-assault {
+  background: #0a1220;
+}
+.lane-assault .la-rain {
+  position: absolute;
+  top: -10%;
+  width: 1px;
+  height: 8%;
+  background: rgba(180, 200, 230, 0.55);
+  animation: lane-rain 0.6s linear infinite;
+}
+.lane-assault .la-rain.r1 {
+  left: 20%;
+}
+.lane-assault .la-rain.r2 {
+  left: 45%;
+  animation-delay: 0.2s;
+}
+.lane-assault .la-rain.r3 {
+  left: 70%;
+  animation-delay: 0.4s;
+}
+.lane-assault::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #dfe8ff;
+  opacity: 0;
+  animation: lane-flash 2.8s linear infinite;
+  pointer-events: none;
+}
+@keyframes lane-rain {
+  from {
+    transform: translateY(-10px);
+  }
+  to {
+    transform: translateY(48px);
+  }
+}
+@keyframes lane-flash {
+  0%,
+  92%,
+  100% {
+    opacity: 0;
+  }
+  94% {
+    opacity: 0.7;
+  }
+  96% {
+    opacity: 0;
+  }
+  98% {
+    opacity: 0.4;
+  }
+}
+
+/* stealth：探照光柱扫过 + 静止的暗处敌人 */
+.lane-stealth {
+  background: #05070c;
+}
+.lane-stealth .la-beam {
+  position: absolute;
+  top: -20%;
+  left: -40%;
+  width: 30%;
+  height: 140%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 240, 200, 0.55) 50%,
+    transparent 100%
+  );
+  transform: skewX(-18deg);
+  animation: lane-beam 3.6s ease-in-out infinite;
+}
+.lane-stealth .la-enemy {
+  position: absolute;
+  bottom: 12%;
+  width: 6%;
+  height: 20%;
+  background: #1a2030;
+  border-radius: 2px;
+}
+.lane-stealth .la-enemy.e1 {
+  left: 25%;
+}
+.lane-stealth .la-enemy.e2 {
+  left: 60%;
+}
+@keyframes lane-beam {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 110%;
+  }
+}
+
+/* balanced：黄昏渐变 + 敌人摆动 */
+.lane-balanced {
+  background: linear-gradient(180deg, #4a3a52 0%, #c08a6a 100%);
+}
+.lane-balanced .la-enemy {
+  position: absolute;
+  bottom: 12%;
+  left: 50%;
+  width: 6%;
+  height: 20%;
+  background: #2a2030;
+  border-radius: 2px;
+  transform-origin: 50% 100%;
+  animation: lane-sway 4s ease-in-out infinite;
+}
+@keyframes lane-sway {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+
+.mb-brief {
+  min-height: 3em;
+  max-width: min(760px, 100%);
+  text-align: center;
+  padding: 0 12px;
+}
+.mb-brief-text {
+  font: 500 clamp(15px, 1.5vw, 19px)/1.4 var(--f-label);
+  letter-spacing: 0.02em;
+  color: var(--bone);
+}
+.mb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+.mb-actions .btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* ---- settings / controls panel ---- */
 .panel {
   position: absolute;
@@ -1671,6 +1950,11 @@ kbd {
 }
 
 /* ---- narrow screens (phones, portrait) ---- */
+@media (max-width: 900px) {
+  .mb-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 @media (max-width: 760px) {
   .h-obj {
     top: calc(78px + var(--sat));
@@ -1712,6 +1996,9 @@ kbd {
   }
   .m-card {
     padding: 22px 20px 20px;
+  }
+  .mb-briefing {
+    justify-content: flex-start;
   }
   .comms-t {
     font-size: 17px;
@@ -1779,5 +2066,9 @@ kbd {
   }
   .h-cue.urgent {
     animation: none;
+  }
+  .lane-anim *,
+  .lane-anim::after {
+    animation: none !important;
   }
 }

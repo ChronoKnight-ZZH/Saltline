@@ -288,3 +288,56 @@
 | 耀斑的 `post` 视觉层（过曝/眩光/扫描线）与电子嗡鸣音效 | 设计稿 §5.4 要求，但需要改 `postprocessing` shader 与新增合成音色；本次只输出 `perception.solarFlare` 强度供后续消费 |
 | `TIME_PRESETS.ambient` / `sunDir` | 属 `游戏参数.md` §4 的 #2/#3 遗留项，不在本次设计方案范围内 |
 | `环境切换仅标题/暂停菜单可用` | 设计稿 §9 提到，但涉及 `menus.js`/`flow.js` 交互重构，且与当前 M2 已实现的下拉行为冲突，需单独确认 |
+
+## 简报屏幕验收（2026-11-14）
+
+依据 `docs/gameConfig/模式改造.md` 落地，Q1–Q5 全部 A/A/B/A/A。
+
+### 静态与构建
+
+| 项目 | 结果 |
+| --- | --- |
+| `npm run check` | 通过：75 模块 + 契约 + 归档与字体校验 |
+| `npm run build` | 通过：79 模块，`dist/index.html` 1,464.91 kB（gzip 452.44 kB） |
+| 逻辑冒烟（临时脚本，已删除） | **883/883 通过** |
+| 静态交叉核对（临时脚本，已删除） | **55/55 通过** |
+| `createMenus` 行为（最小 DOM 桩，已删除） | **86/86 通过** |
+| `createGameFlow` 集成（已删除） | **53/53 通过** |
+| Enter 键回归（已删除） | **11/11 通过** |
+| 全量回归重跑（已删除） | **142/142 通过** |
+| 简报 TTS（已删除） | **33/33 通过** |
+| TTS 加入后全量回归（已删除） | **121/121 通过** |
+
+### 落地清单
+
+| 项 | 改动 |
+| --- | --- |
+| Q1 | `menus.js` 新增 `briefing` 屏幕：4 张 lane 卡 + REROLL/DEPLOY |
+| Q2 | 台词只在简报屏幕显示；`flow.start` 不再额外 `hud.radio` 简报文案 |
+| Q3 | 暂停卡顶部 `data-f="profile"` 行，`menus.setProfile(text)` 写入 |
+| Q4 | `briefingEnabled`：`?time` / `?weather` / `?shot` / `?autostart` 跳过简报 |
+| Q5 | 全屏 `.m-briefing`，4 卡横排；`< 900px` 2×2 |
+| 标题 Enter | 同 Deploy 入口：`briefingEnabled` 时开简报，否则直接开局（修复原代码绕过简报的漏洞） |
+| 简报 TTS | `deployLane()` 内同步 `speakBriefing()`，`en-US` / rate 0.95 / pitch 0.9；`cancel()` 防叠音；不支持或出错静默跳过 |
+| 删除 | M2 的时间/天气 `<select>`、`syncEnvSelects`、`environment:changed` 订阅 |
+| 新增 | `LANES` / `LANE_ORDER` / `briefText` / `profileText` / `inferLane` / `laneAnimMarkup` 导出 |
+
+### 关键发现：两套 Lane 分类并存
+
+`flow.js` 的 `pickLane`（A/B/C/D，供开局 radio 播报）与 `menus.js` 的 `inferLane`（recon/assault/stealth/balanced，供简报卡与 profile 行）是**两套独立分组**，`midnight × heavyRain` 在两套里分属不同 lane。已在 `模式改造.md` §8.2 记录，确认是刻意保留（两处口径不同但都成立）。
+
+### 与方案文档的偏差
+
+| 偏差 | 原因 |
+| --- | --- |
+| `environment.set` 移到 `flow.start(payload)` | 菜单只选不写环境；设置与开局合一处，顺序固定 |
+| `deploy` handler 改为转调 `start(payload)` | URL 直接开局路径也要初始化 `run.lane` |
+| `showBriefing` 聚焦首个 `.lane-btn` | 避开 diff 担心的「聚焦到 disabled 的 primary」 |
+| Tab 循环为简报屏幕单开一段 | 简报屏幕无 `.panel`，走不到面板分支 |
+| 标题界面 Enter 改为与 Deploy 同入口 | 原代码 `addEventListener("keydown")` 里 Enter 直接 `U({})`，会绕过简报屏幕 |
+
+### 未完成：浏览器验收
+
+本会话沙箱下 Edge/Chrome 的 mojo IPC 需要命名管道，无头浏览器无法启动（`FATAL: platform_channel.cc`），按要求跳过脚本启动浏览器测试。动画观感、窄屏换行、`prefers-reduced-motion` 静态配色、真实排版溢出**均未人工复验**，需本地 `npm run dev` 后按 `模式改造.md` §5 逐项点验（`dev`/`preview` 同样受沙箱 spawn 限制，需普通终端）。
+
+**TTS 实际发声未验证**：文本/参数/语音挑选/队列/兜底逻辑均已用 mock 覆盖，但音色、断句、起播延迟需真人试听；Safari/iOS 的 `cancel()` 与默认音量行为可能需实机微调。

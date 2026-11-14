@@ -3,6 +3,9 @@ import { viteSingleFile } from "vite-plugin-singlefile"
 
 export default defineConfig({
   plugins: [viteSingleFile()],
+  build: {
+    assetsInlineLimit: 100000000,
+  },
   base: "./",
   server: {
     host: "127.0.0.1",

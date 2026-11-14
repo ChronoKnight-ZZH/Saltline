@@ -1,7 +1,7 @@
 // Mission progression, relay objectives, waves, extraction and game states.
 import { Vector3 } from "../vendor/three-r180.js";
 import { clamp, damp, saturate, smoothstep } from "../core/math.js";
-import { createMenus } from "../ui/menus.js";
+import { createMenus, inferLane, profileText } from "../ui/menus.js";
 
 var GAME_FLOW = {
   introSeconds: 3.5,
@@ -98,8 +98,10 @@ function createGameFlow(context) {
       return P ? _lanes[pickLane(P.timeOfDay, P.weather)] || "" : "";
     },
     l = createMenus(context, {
-      deploy() {
-        (a(context.audio, "resume"), r.requestLock(), U({}));
+      // 简报屏幕 DEPLOY 传入 { lane, timeOfDay, weather }；
+      // Title 直接 Deploy（无参数，走了 ?time/?shot/?autostart 跳过路径）时 payload 为空。
+      deploy(P) {
+        (a(context.audio, "resume"), r.requestLock(), _.start(P || {}));
       },
       resume() {
         j(!0);
@@ -137,6 +139,9 @@ function createGameFlow(context) {
       relays: [],
       cut: 0,
       allCut: !1,
+      // 本次插入的玩法身份（recon/assault/stealth/balanced）；URL 直接开局时
+      // 由 inferLane 反推。retry/restart 不清空，与难度保持一致。
+      lane: null,
       queue: [],
       waveHot: 0,
       alertT: 0,
@@ -166,6 +171,25 @@ function createGameFlow(context) {
       run: c,
       menus: l,
       start(P = {}) {
+        // 简报屏幕传来的 payload：lane + 随机到的 time/weather。
+        // URL 直接开局（?shot / ?autostart / ?time=…）不传这些字段，
+        // environment 已由 runtime 的 URL 参数处理，这里不覆盖。
+        if (P && P.timeOfDay && P.weather && context.environment) {
+          try {
+            context.environment.set({
+              timeOfDay: P.timeOfDay,
+              weather: P.weather,
+            });
+          } catch (V) {
+            console.error("[game] environment.set from briefing failed", V);
+          }
+        }
+        c.lane =
+          (P && P.lane) ||
+          inferLane(
+            context.environment && context.environment.timeOfDay,
+            context.environment && context.environment.weather,
+          );
         U({
           skipIntro: !!P.skipIntro,
           quick: !!P.quick,
@@ -405,11 +429,22 @@ function createGameFlow(context) {
       document.hidden && _.state === "playing" && G();
     }),
     addEventListener("keydown", (P) => {
-      _.state !== "title" ||
+      // 标题界面按 Enter 等价于点 Deploy：必须走同一个入口，
+      // 否则会绕过简报屏幕直接开局（briefingEnabled 时）。
+      if (
+        _.state !== "title" ||
         l.panelOpen ||
         (P.code !== "Enter" && P.code !== "NumpadEnter") ||
-        (P.target && P.target.tagName === "BUTTON") ||
-        (a(context.audio, "resume"), r.requestLock(), U({}));
+        (P.target && P.target.tagName === "BUTTON")
+      )
+        return;
+      a(context.audio, "resume");
+      if (l.briefingEnabled) {
+        l.showBriefing();
+        return;
+      }
+      r.requestLock();
+      _.start({});
     }));
   function G() {
     _.state === "playing" &&
@@ -423,6 +458,19 @@ function createGameFlow(context) {
             ? ""
             : "Resume recaptures the mouse.",
       ),
+      // 暂停卡顶部显示本次插入配置（URL 开局时按时间/天气反推 lane）。
+      l.setProfile &&
+        l.setProfile(
+          profileText(
+            context.environment && context.environment.timeOfDay,
+            context.environment && context.environment.weather,
+            c.lane ||
+              inferLane(
+                context.environment && context.environment.timeOfDay,
+                context.environment && context.environment.weather,
+              ),
+          ),
+        ),
       o.show(!1),
       l.show("paused"),
       (d = 0.35),

@@ -32,8 +32,8 @@
 | `enemies/` | `enemies.js` 管理生成/回收与 `ENEMY_TUNING`；`models.js` 建模；`walker.js`、`drone.js` 行为 |
 | `effects/` | `effects.js` 创建/更新特效；`particles.js` 纹理/粒子；`pools.js` 复用池 |
 | `audio/` | `synthesis.js` 合成器；`music.js` 音乐；`library.js` 音库；`audio.js` 调度/混音 |
-| `ui/hud.js`、`ui/menus.js`、`ui.css` | HUD、字幕、菜单、设置、控件和布局 |
-| `game/flow.js` | `createGameFlow`、`GAME_FLOW`：三中继任务、波次、撤离、暂停、死亡和结算 |
+| `ui/hud.js`、`ui/menus.js`、`ui.css` | HUD、字幕、菜单、设置、控件和布局；`menus.js` 另有 `LANES`/`briefText`/`profileText`/`inferLane`（部署前简报屏幕） |
+| `game/flow.js` | `createGameFlow`、`GAME_FLOW`：三中继任务、波次、撤离、暂停、死亡和结算；`start(payload)` 接收简报的 `lane/timeOfDay/weather` |
 
 常见改动可直接从这些地方入手：移动速度在 `PLAYER_MOVEMENT`，画质在 `QUALITY_PRESETS`，任务节奏在 `GAME_FLOW`，键位在 `KEY_BINDINGS`，敌人参数在对应敌人模块中。
 
@@ -84,6 +84,8 @@ window.__G;        // 运行中的游戏上下文
 
 `window.__G.audio.setWeather("heavyRain")` / `setTimeOfDay("midnight")` 可手动切音频层，`__G.audio.weather` / `__G.audio.musicMood` 读当前倍率（M5）。`?show=environment` 每 6s 换时间、每 4s 换天气。
 
+时间/天气在**游戏内不再提供 UI 开关**（M2 的下拉已移除）：正常流程走 Title → Deploy → 简报屏幕选 lane 并随机到某个组合。控制台调试仍可 `__G.environment.set({ timeOfDay, weather })`。简报屏幕的卡片分组是 `menus.js` 的 `LANES`（recon/assault/stealth/balanced），与 `flow.js` 的 `pickLane`（A/B/C/D 播报分组）是两套独立分类，详见 `docs/gameConfig/模式改造.md` §8.2。
+
 ## 原版调试参数
 
 | URL | 用途 |
@@ -95,9 +97,11 @@ window.__G;        // 运行中的游戏上下文
 | `/?noaudio=1` | 禁用声音模块 |
 | `/?bench=1` | 原版巡游基准和帧时间面板 |
 | `/?shot=1&q=test&seed=4207&dt=0&noaudio=1&cam=-32,1.68,6,0,1.68,6` | 本次回归使用的固定时间、种子、镜头场景 |
-| `/?time=midnight&weather=heavyRain` | 固定时间/天气（M1 起） |
+| `/?time=midnight&weather=heavyRain` | 固定时间/天气（M1 起）；**同时跳过简报屏幕** |
 | `/?time=dawn&weather=clear` | 显式默认组合，`force: true` 应用 |
 | `/?show=environment` | 时间/天气/直升机/闪电展示，每 6s/4s 自动切换（M5） |
+
+无上述环境/自动化参数时，Deploy 会先进入简报屏幕（`menus.js` 的 `briefingEnabled`），必须选一条 lane 才能开局。
 
 首次启动的画质也会受到已保存设置影响；验收时应同时记录 URL 和设置。不同机器的 GPU 性能不能直接比较。
 
