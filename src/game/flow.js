@@ -106,14 +106,8 @@ function createGameFlow(context) {
       resume() {
         j(!0);
       },
-      restart() {
-        (a(context.audio, "resume"),
-          r.requestLock(),
-          c.retries++,
-          U({
-            quick: !0,
-            keepRetries: !0,
-          }));
+      toTitle() {
+        xt();
       },
       retry() {
         (a(context.audio, "resume"),
@@ -202,6 +196,9 @@ function createGameFlow(context) {
         j(!1);
       },
       update: B,
+      toTitle() {
+        xt();
+      },
       debugCut() {
         let P = c.relays.find((V) => !V.cut);
         P && me(P);
@@ -486,6 +483,33 @@ function createGameFlow(context) {
       r.requestLock(),
       M("playing"),
       setTimeout(() => C(!0), 700));
+  }
+  // 暂停菜单的 "Return to title"：整局复位（relay/计时/敌人/玩家/HUD）后回到首屏，
+  // 而不是在当前位置重开。Deploy 会重新走 地图 → 天气 两级。
+  function xt() {
+    (a(context.audio, "resume"),
+      a(context.audio, "setPaused", !1),
+      a(context.audio, "setIntensity", 0.15),
+      r.exitLock && r.exitLock(),
+      r.setGameplay && r.setGameplay(!1),
+      H(),
+      (c.retries = 0),
+      (c.lane = null),
+      w(),
+      (E.t = 0),
+      (n.enabled = !1),
+      a(context.weapon, "setVisible", !1),
+      o.show(!1),
+      o.setPrompt && o.setPrompt(null),
+      l.locationCard(!1),
+      (u = 0),
+      (h = GAME_FLOW.introSeconds),
+      (f = !1),
+      (p = !1),
+      (d = 0),
+      (g = !1),
+      M("title"),
+      l.show("title"));
   }
   function N(P) {
     let V = P === "gull" ? "air" : "ground",
@@ -884,6 +908,8 @@ function createGameFlow(context) {
     r.setGameplay && r.setGameplay(!1),
     a(context.audio, "setIntensity", 0.15),
     context.params.shot || context.params.autostart || l.show("title"),
+    // 从地图卡片换图重载回来时（?brief=1）直接落到天气选择，不必再点一次 Deploy。
+    context.params.brief && l.briefingEnabled && l.showBriefing(),
     _
   );
 }
