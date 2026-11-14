@@ -522,11 +522,27 @@ function createMenus(context, e) {
       syncLaneButtons(),
       renderBriefing(),
       syncBriefingActions());
+    // 卡片换成这一格的真实天色（真天空 shader，只改 uniform + 重烘一次）
+    applyLaneSky();
   }
 
   function rerollLane() {
     if (!briefing.lane) return;
     ((briefing.cell = pickCell(briefing.lane)), renderBriefing());
+    applyLaneSky();
+  }
+
+  // 把当前 lane 的 cell 刷到对应卡片上。三处兜底：简报场景未挂载、cell 缺失、
+  // 以及 WebGL 不可用（mount 失败后 setLaneSky 内部直接返回 false）。
+  function applyLaneSky() {
+    if (!briefing.lane || !briefing.cell) return;
+    try {
+      briefingScenes.setLaneSky(
+        briefing.lane,
+        briefing.cell[0],
+        briefing.cell[1],
+      );
+    } catch {}
   }
 
   function showBriefing() {

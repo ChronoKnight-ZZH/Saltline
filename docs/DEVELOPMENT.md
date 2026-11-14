@@ -33,6 +33,7 @@
 | `effects/` | `effects.js` 创建/更新特效；`particles.js` 纹理/粒子；`pools.js` 复用池 |
 | `audio/` | `synthesis.js` 合成器；`music.js` 音乐；`library.js` 音库；`audio.js` 调度/混音 |
 | `ui/hud.js`、`ui/menus.js`、`ui.css` | HUD、字幕、菜单、设置、控件和布局；`menus.js` 另有 `LANES`/`briefText`/`profileText`/`inferLane`（部署前简报屏幕） |
+| `ui/briefing-scenes.js` | 简报卡片的 Three.js 场景：4 个正交小场景共用 1 个渲染器（scissor/viewport）；天空复用 `render/sky.js` 并按 `时间×天气` 预设烘到 RenderTarget，`setLaneSky()` 供选卡/重 roll 实时换天色 |
 | `game/flow.js` | `createGameFlow`、`GAME_FLOW`：三中继任务、波次、撤离、暂停、死亡和结算；`start(payload)` 接收简报的 `lane/timeOfDay/weather` |
 
 常见改动可直接从这些地方入手：移动速度在 `PLAYER_MOVEMENT`，画质在 `QUALITY_PRESETS`，任务节奏在 `GAME_FLOW`，键位在 `KEY_BINDINGS`，敌人参数在对应敌人模块中。

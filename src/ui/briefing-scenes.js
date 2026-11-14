@@ -1,13 +1,21 @@
 // 简报屏幕 4 个 lane 卡片的 Three.js 小场景。
-// 1 个透明 WebGLRenderer，用 scissor/viewport 同时渲染 4 个正交小场景；
-// 卡片背景色仍由 CSS .lane-* 提供，这里只画前景元素（太阳/敌人/雨/光柱）。
+// 1 个透明 WebGLRenderer，用 scissor/viewport 同时渲染 4 个正交小场景。
+//
+// 天空：复用实机 sky shader（`Hy` + `applySkyPreset`），用 `combine(time, weather)`
+// 的真实预设值着色，再烘到每卡一张 RenderTarget 当背景贴图。每帧只画一个贴图 quad，
+// 不在每帧跑 fbm5 天空着色器——后者每像素要十几次纹理采样，4 张卡同时跑会拖垮低端机。
+// `setLaneSky()` 在选卡/重 roll 时只改 uniform + 重烘一次，卡片即时反映所选时间+天气。
+//
+// 前景（太阳/敌人/雨丝/闪电/光柱）仍是轻量几何体，保持原实现。
 // WebGL 失败时抛错，由调用方 catch 并保留 CSS keyframes 降级。
 import {
+  ACESFilmicToneMapping,
   AdditiveBlending,
   BoxGeometry,
   Color,
   Group,
   InstancedMesh,
+  LinearSRGBColorSpace,
   Mesh,
   MeshBasicMaterial,
   Object3D,
@@ -15,8 +23,29 @@ import {
   PlaneGeometry,
   Scene,
   SphereGeometry,
+  WebGLRenderTarget,
   WebGLRenderer,
 } from "../vendor/three-r180.js";
+import { combine } from "../core/environment-presets.js";
+import { Hy, applySkyPreset, createNoiseTexture } from "../render/sky.js";
+
+// 每张卡的「签名」环境：卡片默认显示它，玩家选卡/重 roll 后换成实际滚动到的格子。
+// 注意：`combine()` 里 skyTop/skyHorizon 只由「时间」决定，天气只改 sunDisk，
+// 所以 4 张卡必须用 4 个不同时间段，缩略图上才真的能分辨。
+// 每个格子都在对应 lane 的 cells 列表内（见 menus.js 的 LANES）。
+var PREVIEW_CELLS = {
+  recon: ["noon", "clear"], // 正午晴：太阳盘全开、天最亮
+  assault: ["dusk", "heavyRain"], // 黄昏暴雨：暗橙天、太阳盘几乎熄灭
+  stealth: ["midnight", "clear"], // 午夜晴：深蓝夜空，无太阳
+  balanced: ["dawn", "lightRain"], // 黎明小雨：灰暖天，太阳盘压到 0.08
+};
+
+// 正交相机视锥：x ∈ [-1,1]，y ∈ [-0.62,0.62]（16:10）。背景 quad 与之等大。
+var FRUSTUM = { halfW: 1, halfH: 0.62, near: 0.1, far: 10, z: 5 };
+
+// 实机 ACES 的曝光基准（renderer.js 用 0.6 * exposure）：这里把 toneMappingExposure
+// 固定成 0.6，逐卡把 exposure 乘到 bgMat.color 上，等价于实机的 ACES(linear * exposure)。
+var ACES_BASE = 0.6;
 
 function isLowQuality(context) {
   let q = context && context.quality;
@@ -269,6 +298,20 @@ function buildStorm(low) {
   };
 }
 
+// 纯函数：时间+天气 → 天空 uniform 载荷 + 曝光。抽出来便于无 WebGL 环境单测。
+// 只取 `combine()` 里天空真正消费的字段，其余（雾/雨/能见度）不动。
+function briefingSkyPreset(timeOfDay, weather) {
+  let p = combine(timeOfDay, weather);
+  return {
+    skyTop: p.skyTop,
+    skyHorizon: p.skyHorizon,
+    sunColor: p.sunColor,
+    sunDir: p.sunDir,
+    sunDisk: p.sunDisk,
+    exposure: p.exposure,
+  };
+}
+
 function createBriefingScenes(context) {
   let renderer = null,
     canvas = null,
@@ -278,6 +321,7 @@ function createBriefingScenes(context) {
     lastT = 0,
     ro = null,
     mq = null,
+    noiseTex = null,
     lanes = [],
     viewports = [],
     low = isLowQuality(context);
@@ -289,6 +333,93 @@ function createBriefingScenes(context) {
       { key: "stealth", el: null, ...buildStealth(low) },
       { key: "balanced", el: null, ...buildStorm(low) },
     ];
+    for (let l of lanes) attachSky(l);
+  }
+
+  // 每卡一套：真天空材质 + 专用正交相机 + 一张 RenderTarget（烘好的天色）+ 背景 quad。
+  // 4 个天空材质 shader 源码完全相同、无差异化 define，three 的程序缓存会复用同一个
+  // program；noise 贴图 4 卡共享一张。
+  function attachSky(lane) {
+    let sky = Hy(noiseTex);
+
+    let skyScene = new Scene();
+    skyScene.add(sky.mesh);
+
+    let skyCam = new OrthographicCamera(
+      -FRUSTUM.halfW,
+      FRUSTUM.halfW,
+      FRUSTUM.halfH,
+      -FRUSTUM.halfH,
+      FRUSTUM.near,
+      FRUSTUM.far,
+    );
+    skyCam.position.z = FRUSTUM.z;
+
+    // 初始 64x40，mount 后 resize() 会按卡片实际像素重设并重烘
+    let rt = new WebGLRenderTarget(64, 40);
+    rt.texture.colorSpace = LinearSRGBColorSpace;
+
+    let bgMat = new MeshBasicMaterial({
+      map: rt.texture,
+      depthWrite: false,
+      fog: false,
+    });
+    let bg = new Mesh(
+      new PlaneGeometry(FRUSTUM.halfW * 2, FRUSTUM.halfH * 2),
+      bgMat,
+    );
+    bg.position.z = -2;
+    bg.frustumCulled = false;
+    bg.renderOrder = -500;
+    lane.scene.add(bg);
+
+    lane.sky = sky;
+    lane.skyScene = skyScene;
+    lane.skyCam = skyCam;
+    lane.rt = rt;
+    lane.bgMat = bgMat;
+    lane.bg = bg;
+    lane.cell = null;
+    lane.exposure = 1;
+  }
+
+  // 把某个时间+天气刷到一张卡上。只写 uniform，O(1)，不重建、不重编译。
+  function applyCell(lane, cell, stamp) {
+    if (!lane || !lane.sky || !cell) return;
+    let p = briefingSkyPreset(cell[0], cell[1]);
+    applySkyPreset(lane.sky, p);
+    let u = lane.sky.material.uniforms;
+    if (u.uTime) u.uTime.value = stamp;
+    if (u.uEnv) u.uEnv.value = 0; // 0 = 可见天空（1 是 PMREM 环境贴图模式）
+    if (u.uFlash) u.uFlash.value = 0;
+    lane.exposure = p.exposure;
+    lane.cell = [cell[0], cell[1]];
+    // 曝光乘进材质颜色：renderer.toneMappingExposure 固定 0.6，
+    // 于是像素 = ACES(linearSky * exposure)，与实机 ACES(linear * exposure) 等价。
+    if (lane.bgMat) lane.bgMat.color.setScalar(p.exposure);
+  }
+
+  // 把该卡天空烘进 RenderTarget。只在挂载 / 换格 / resize 时调用，不在每帧调用。
+  function bakeSky(lane) {
+    if (!renderer || !lane || !lane.rt || !lane.skyScene) return;
+    if (lane.rt.width < 8 || lane.rt.height < 8) return;
+    renderer.setScissorTest(false);
+    renderer.setRenderTarget(lane.rt);
+    renderer.setClearColor(0x000000, 1);
+    renderer.clear(!0, !0, !1);
+    renderer.render(lane.skyScene, lane.skyCam);
+    renderer.setRenderTarget(null);
+    renderer.setScissorTest(true);
+  }
+
+  // 对外：选卡 / 重 roll 时切某张卡的天色。
+  function setLaneSky(key, timeOfDay, weather) {
+    let lane = null;
+    for (let l of lanes) if (l.key === key) lane = l;
+    if (!lane) return false;
+    applyCell(lane, [timeOfDay, weather], performance.now() / 1000);
+    if (mounted) bakeSky(lane);
+    return true;
   }
 
   function computeViewports() {
@@ -319,6 +450,21 @@ function createBriefingScenes(context) {
     canvas.style.width = rect.width + "px";
     canvas.style.height = rect.height + "px";
     computeViewports();
+    // 天空贴图跟卡片实际像素走；宽度上限 512 约束重烘成本。
+    for (let vp of viewports) {
+      let lane = vp.lane;
+      if (!lane || !lane.rt) continue;
+      let w = Math.max(48, Math.round(vp.w));
+      let h = Math.max(32, Math.round(vp.h));
+      if (w > 512) {
+        h = Math.max(32, Math.round((h * 512) / w));
+        w = 512;
+      }
+      if (lane.rt.width !== w || lane.rt.height !== h) {
+        lane.rt.setSize(w, h);
+        bakeSky(lane);
+      }
+    }
   }
 
   function renderOnce(t, dt) {
@@ -372,14 +518,24 @@ function createBriefingScenes(context) {
     renderer.setClearColor(0x000000, 0);
     renderer.autoClear = false;
     renderer.setScissorTest(true);
+    // 与实机后处理同样的 tone mapping：背景贴图走 ACES，前景材质 toneMapped:false 保持原样。
+    renderer.toneMapping = ACESFilmicToneMapping;
+    renderer.toneMappingExposure = ACES_BASE;
     canvas = renderer.domElement;
     canvas.className = "briefing-canvas";
     canvas.setAttribute("aria-hidden", "true");
     el.appendChild(canvas);
     el.dataset.scenes = "on";
 
+    // noise 贴图 4 卡共享一张（256x256 RGBA）
+    noiseTex = createNoiseTexture();
     buildAll();
     for (let l of lanes) l.el = el.querySelector(".lane-anim.lane-" + l.key);
+    // 初始天色：每张卡先给它的「签名」环境，uTime 取随机相位让 4 张卡云层不同。
+    for (let l of lanes) {
+      let c = PREVIEW_CELLS[l.key];
+      if (c) applyCell(l, c, Math.random() * 20);
+    }
     resize();
 
     mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -429,6 +585,29 @@ function createBriefingScenes(context) {
           else obj.material.dispose();
         }
       });
+      // 天空是独立 scene，主 scene.traverse 覆盖不到，单独释放
+      if (l.skyScene) {
+        l.skyScene.traverse((obj) => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) {
+            if (Array.isArray(obj.material))
+              obj.material.forEach((m) => m.dispose());
+            else obj.material.dispose();
+          }
+        });
+      }
+      if (l.rt) {
+        l.rt.dispose();
+        l.rt = null;
+      }
+      l.sky = null;
+      l.skyScene = null;
+      l.bgMat = null;
+      l.bg = null;
+    }
+    if (noiseTex) {
+      noiseTex.dispose();
+      noiseTex = null;
     }
     lanes = [];
     viewports = [];
@@ -441,10 +620,11 @@ function createBriefingScenes(context) {
   return {
     mount,
     unmount,
+    setLaneSky,
     get mounted() {
       return mounted;
     },
   };
 }
 
-export { createBriefingScenes };
+export { createBriefingScenes, briefingSkyPreset, PREVIEW_CELLS };

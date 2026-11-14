@@ -321,6 +321,23 @@
 | 简报 TTS | `deployLane()` 内同步 `speakBriefing()`，`en-US` / rate 0.95 / pitch 0.9；`cancel()` 防叠音；不支持或出错静默跳过 |
 | 删除 | M2 的时间/天气 `<select>`、`syncEnvSelects`、`environment:changed` 订阅 |
 | 新增 | `LANES` / `LANE_ORDER` / `briefText` / `profileText` / `inferLane` / `laneAnimMarkup` 导出 |
+| 卡片真实天空 | `briefing-scenes.js` 复用实机 sky shader，按 `时间×天气` 预设着色，烘到 RT 当背景；选卡/重 roll 实时换天色 |
+
+### 卡片真实天空验证（2026-11-14）
+
+| 项目 | 结果 |
+| --- | --- |
+| `npm run check` | 通过：76 模块 + 契约 + 归档与字体校验 |
+| `npm run build` | 通过，`dist/index.html` 1,475.43 kB（gzip 456.28 kB） |
+| 天空预设与材质（临时脚本，已删除） | **172/172 通过** |
+| 接线静态审计（临时脚本，已删除） | **38/38 通过** |
+| 无 WebGL 降级回归（临时脚本，已删除） | **18/18 通过** |
+
+关键断言：16 格全部产出合法载荷、`sunDir` 归一化、`sunDisk∈[0,1]`、曝光与 `TIME_PRESETS` 同源、4 个 `Hy()` 实例 uniform 互相独立、`applySkyPreset` 真实写入 5 个 uniform、共享同一 noise 贴图、`bakeSky` 不在每帧调用、`unmount` 释放 RT/天空/noise、无 WebGL 时全流程不抛错。
+
+**设计发现**：`combine()` 里 `skyTop/skyHorizon` 只由时间决定、天气只改 `sunDisk`，所以 4 张卡改用 4 个不同时间段（noon / dusk / midnight / dawn）才在缩略图上有区分度；四个签名格均在对应 lane 的 `cells` 内。
+
+**未验证**：卡片真实画面观感（云层、太阳盘在正交视口下的比例）、低端机帧率、`gl_Position = p.xyww` 在正交相机下的地平线比例，均需实机目视校准。
 
 ### 关键发现：两套 Lane 分类并存
 
