@@ -174,12 +174,12 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 
 | 项 | 数量 | 分布 |
 | --- | --- | --- |
-| `coverPoints` | 48 | yard 22（含 6 个箱顶）/ coldstore 12 / quay 8（含 4 个桥面）/ gate+bridge 6 |
-| `enemySpawns` 地面 | 26 | yard 10 / coldstore 8 / quay 8 |
-| `enemySpawns` 空中 | 17 | yard 7（y 9~12）/ coldstore 3（y 4.5~5.5，天窗下）/ quay 7（y 8.5~13） |
-| `interiorBoxes` | 1 | coldstore 内腔，`y 0 → 7` |
+| `coverPoints` | 48 | yard 34（含 10 个箱顶）/ coldstore 6 / quay 8 |
+| `enemySpawns` 地面 | 26 | yard 13 / coldstore 6 / quay 7 |
+| `enemySpawns` 空中 | 17 | yard 7（y 9~15）/ coldstore 4（y 4.4~5，天窗下）/ quay 6（y 9~13） |
+| `interiorBoxes` | 1 | coldstore 内腔，`y 0 → 6.2` |
 
-所有点写完必须过一遍 `nav.isWalkable`；`createLevel` 末尾已有 2 m 环形搜索兜底，但**只兜底一次**，写歪了会被悄悄挪位置，验收时要用脚本断言。
+所有点写完必须过一遍 `nav.isWalkable`；`createLevel` 末尾已有 2 m 环形搜索兜底，但**只兜底一次**，写歪了会被悄悄挪位置。Step 2 已把这条落成构建期断言：`createTidegateLevel` 末尾的 `auditNav()` 会逐点查 26 个地面出生点 + 38 个地面掩体，失败时以 `[tidegate] N/M 个地面点不可走 … 坐标清单` 打警告，通过时打一条 `nav audit: 64 个地面点全部可走`。当前结果：64/64 全绿（首轮曾抓出 7 个坏点：`(9,-10)` 压在托盘上、`(28,12)` 压系缆桩、`(19,-2)` 压轮胎堆、`(3.5,24)` 压垃圾箱、`(14,-23)` 压托盘、`(28,4)` 压系缆桩、`(19,-26)` 压管材堆，已全部挪开）。
 
 ### 2.8 撤离与远景对齐
 
@@ -191,6 +191,8 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 
 - 复用现有夜雨预设，不改 `environment-presets`。
 - 冷库：4 盏点光（`userData.baseIntensity`，由 `setLights` 统一调光）+ 4 个 `skylights`（仅数据，不是灯）；室内亮度低于场地 40%，靠中继自发光与手电感做引导。
+  - Step 2 已实现：`buildColdLights()` 生成 4 盏 `PointLight(0xbfd4e6, 34, 13, 2)`，位置压在天窗正下方 `y=5.35`（`(9,-24) (15,-24) (9,-12) (15,-12)`），挂在 `levelRoot`（不能进 `staticRoot`，否则会被合批吃掉），`setLights(on, k)` 复刻 `level.js` 的语义：`k = clamp(intensity)`、`lit = on && k > 0.05`、熄灭时 `intensity = 0`。
+  - 天窗目前仍是**几何光带 + 数据**，没有体积光柱（Step 3）。
 - 可读性三原则：①三个中继各配**唯一颜色自发光**（A 青 / B 橙 / C 白），远处可辨；②地面用 `decal` 画“去 A/B/C”标线；③栈桥边沿加 `hazard_stripes`，防止玩家在 4.8 m 处失足。
 
 ### 2.10 道具清单（只用已注册的 37 个名字）
@@ -247,7 +249,7 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 
 ### 3.3 真实风险（3 条，都是“会悄悄坏”的那种）
 
-1. **导航可达性**：出生点/掩体落在不可走格会被 2 m 环形搜索静默挪走；必须脚本断言，否则体感是“敌人从墙里出来”。
+1. **导航可达性**：出生点/掩体落在不可走格会被 2 m 环形搜索静默挪走，体感是“敌人从墙里出来”。Step 2 已落成构建期断言 `auditNav()`（`tidegate.js` 末尾，逐点查 `nav.isWalkable`，失败打坐标清单）。
 2. **合批与 noMerge**：中继、卷帘门、吊具这类要动的物体必须 `dynRoot` 或 `noMerge`，否则被合批进 `level-merged`，`object` 引用失效 → 交互失效。
 3. **4.8 m 栈桥的地面判定**：可行走面依赖 mesh 的 raycast，接缝 > 0.5 m 会掉下去；桥面必须整段 `catwalk` 连续铺。
 
@@ -320,11 +322,34 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 | `?show=level` 回归 | 原关卡照常成像，`NaN` 计 0，未出现新报错 |
 | `?map=tidegate&autostart=1` | 整局可启动：HUD 显示 “CUT THE THREE LINK RELAYS / RELAYS CUT 0/3”，出生在闸口内侧，任务停菜单可正常弹出 |
 
-### 4.5 本步明确未做（Step 2 / Step 3）
+### 4.5 Step 2 落地（导引 / 灯光 / 配额）
 
-1. 地面去 A/B/C 的导引贴花、`hazard_stripes` 边沿提示。
-2. 冷库点光：`shedLights` 目前是空数组、`setLights` 为 no-op；天窗只是几何光带，无真实光照。
-3. 掩体/出生点补到设计配额（现 35 掩体 / 24+11 出生点）。
-4. 栈桥北端没有下行梯，玩家目前只能从 4.8 m 跳下。
-5. **未做脚本断言**：出生点与 coverPoint 的 `nav.isWalkable`、楼梯/桥面接缝的实际通行（自动化环境拿不到 pointer lock，无法真机走位），需要在 Step 2 用无头断言补上。
-6. 冷库内部视线（`interiorBoxes` 只有 1 条）、以及全局远景（直升机落在堆场空地，属 backdrop 全局资产，未按新图挪位）。
+| 子任务 | 实现 | 验收 |
+| --- | --- | --- |
+| 地面导引 | `buildGuide()`：17 个 `arrow` decal 串起闸口→A→冷库西门→B→码头东门→楼梯→栈桥→撤离；朝向由 `DIR_ROT` 映射（`K=0 → -z`、`-π/2 → +x`、`π/2 → -x`、`π → +z`） | 地面视角截图，堆场通道箭头指向 +x，与路线一致 |
+| 边沿警示 | 4 处门槛 + 桥面北端（`z -7.46~-7.3`）+ C 平台南沿（`z -5.06~-4.9`）+ 楼梯脚下，共 7 条 `hazard_stripes` 板 | C 平台截图：黄黑警示条清晰可读 |
+| 气味层 | `caution_stripes` ×1、`oil_stain` ×2、`leak_stain` ×1 | 无 `[mats] unknown decal` 警告 |
+| 冷库灯光 | `buildColdLights()` 4 盏 `PointLight(0xbfd4e6, 34, 13, 2)` @`y=5.35`，`setLights(on, k)` 按 `lampOn` 缩放 | 冷库内景截图：货架、托盘、天花被照亮，室内明显暗于场地 |
+| 掩体 | 31 → **48**（38 地面 + 10 箱顶） | `auditNav` 报 64/64 可走 |
+| 出生点 | 24+11 → **26 地面 + 17 空中** | 同上；空中点不参与导航断言 |
+| 导航断言 | `auditNav(context)` 在关卡构建末尾跑一遍 `physics.nav.isWalkable` | 首轮抓出 7 个坏点并修正，现全绿 |
+
+坏点修正记录（都是“压在道具上”这种不会报错、只会被静默挪走的情况）：
+
+| 原点 | 压在什么 | 改成 |
+| --- | --- | --- |
+| `spawn (9,-10)` | `pallet_stack (9.6,-10.4)` | `(10.4,-7.6)` |
+| `spawn (28,12)` | `bollard_mooring (29,12)` | `(27,12)` |
+| `spawn (19,-2)` | `tire_stack (19.4,-2.6)` | `(20,-1)` |
+| `cover (3.5,24)` | `dumpster (3.2,24.5)` | `(4.6,21)` |
+| `cover (14,-23)` | `pallet_stack (14.8,-22.2)` | `(10.2,-24)` |
+| `cover (28,4)` | `bollard_mooring (29,4)` | `(27,4)` |
+| `cover (19,-26)` | `pipe_stack (19.6,-24.6)` | `(23.5,-26)` |
+
+### 4.6 仍未做（Step 3）
+
+1. 天窗真实光柱 / 体积光，以及冷库“室内亮度低于场地 40%”的整体压暗（现在只靠 4 盏点光与材质）。
+2. 栈桥北端没有下行梯，玩家目前只能从 4.8 m 跳下。
+3. **楼梯与桥面的实际通行未做真机验证**：`stairs_metal` 每级升 0.2 m 的台阶吸附、6 段 `catwalk` 的接缝，需要能拿到 pointer lock 的手动试玩或额外的胶囊移动单测（自动化环境无法按住 W 走位）。
+4. 冷库内部视线（`interiorBoxes` 只有 1 条）、以及全局远景（直升机落在堆场空地，属 backdrop 全局资产，未按新图挪位）。
+5. `?bench=1` 性能对照与完整通关（三中继顺序自由 + 撤离）未跑。

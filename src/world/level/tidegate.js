@@ -1,16 +1,15 @@
-// TIDEGATE — 第二张关卡的地面空间骨架（Step 1）。
+// TIDEGATE — 第二张关卡的关卡空间与战术层（Step 1 骨架 + Step 2 战术层）。
 //
 // 目标：在不改动 physics / flow / ground / backdrop / player 的前提下，
 // 用与 level.js 完全相同的关卡 DSL（buildings.js#ob）搭出四个分区：
 //   gate / yard / coldstore / quay，并返回同样形状的 LevelSystem。
 //
-// Step 1 只做“构图与可行性”：
-//   - 分区壳体、集装箱阵列、冷库壳体与内腔、码头栈桥
-//   - 三个中继节点（占位）、撤离点、玩家出生
-//   - 出生点 / 掩体给的是可用子集，Step 2 再补到设计配额
-// Step 2/3 要补的：地面标线与导引、冷库点光与天窗表现、掩体/出生点满编、桥面下行梯。
+// Step 1：分区壳体、集装箱阵列、冷库壳体与内腔、码头栈桥、三中继占位。
+// Step 2：地面导引贴花与 hazard 边沿、冷库 4 盏点光（接 setLights）、
+//         掩体补到 48、出生点补到 26 地面 + 17 空中，并在构建期做 nav 断言。
+// Step 3 待补：天窗真实光柱、栈桥北端下行梯、bench 与完整通关。
 
-import { Group, Vector3, defineModuleExports } from "../../vendor/three-r180.js";
+import { Group, PointLight, Vector3, defineModuleExports } from "../../vendor/three-r180.js";
 import { batchStaticMeshes } from "../../core/geometry.js";
 import { ob } from "./buildings.js";
 
@@ -56,6 +55,7 @@ function createTidegateLevel(context) {
   buildYard(t);
   buildColdStore(t);
   buildQuay(t);
+  buildGuide(t);
 
   // 动态件（中继、栈桥灯箱之类）在合批前搬到 dynRoot，否则引用会被合批吃掉。
   for (var relay of relays) t.dynRoot.attach(relay);
@@ -65,6 +65,10 @@ function createTidegateLevel(context) {
   merged.name = "level-merged";
   levelRoot.add(merged);
   levelRoot.add(t.dynRoot);
+
+  // 冷库点光必须挂在 levelRoot（不在 staticRoot 里，否则会进合批）。
+  var lights = buildColdLights(levelRoot);
+  auditNav(context);
 
   var tris = 0;
   merged.traverse(function (node) {
@@ -120,7 +124,7 @@ function createTidegateLevel(context) {
     cinematicPath: cinematicPath(),
     coverPoints: coverPoints(),
     skylights: skylights(),
-    shedLights: [],
+    shedLights: lights,
     vantage: {
       stairsFoot: new Vector3(26, 0, 16.6),
       roof: new Vector3(25, L.bridgeY, -6.2),
@@ -138,8 +142,14 @@ function createTidegateLevel(context) {
     groundSurfaceAt(x, z) {
       return t.isMetal(x, z) ? "metal" : "concrete";
     },
-    setLights() {
-      // Step 1 冷库点光未接入；Step 3 由 shedLights 数组驱动。
+    setLights(on, intensity) {
+      // 与原关卡同一套语义：environment 用 lampOn 驱动，白天彻底熄灭。
+      var k = Math.max(0, Math.min(1, +intensity || 0));
+      var lit = !!on && k > 0.05;
+      for (var i = 0; i < lights.length; i++) {
+        var l = lights[i];
+        if (l && l.isLight) l.intensity = lit ? (l.userData.baseIntensity || 1) * k : 0;
+      }
     },
     update(dt) {
       for (var i = 0; i < t.updaters.length; i++) {
@@ -318,6 +328,115 @@ function buildCatwalk(t, x) {
   t.place("fence_panel", 22.8, -6.2, HALF_TURN, { seed: 92 }, L.bridgeY + 0.05);
 }
 
+// ---------------------------------------------------------------- 导引层（Step 2）
+
+// decal 的旋转：quad 先绕 z 转 K，再绕 x 转 -90°，因此 K 决定地面文案的朝向。
+// 推导结果：K=0 → 箭头指 -z；K=-π/2 → +x；K=π/2 → -x；K=π → +z。
+var DIR_ROT = { "x+": -HALF_TURN, "x-": HALF_TURN, "z+": Math.PI, "z-": 0 };
+
+function arrow(t, x, z, dir, size) {
+  t.decal("arrow", size || 2.4, x, 0.006, z, "y+", DIR_ROT[dir] || 0);
+}
+
+function buildGuide(t) {
+  // 1) 主路线箭头：闸口 → 中继 A → 冷库西门 → 中继 B → 码头东门 → 楼梯 → 栈桥 → 撤离。
+  arrow(t, -31.4, 1, "x+");
+  arrow(t, -20, 3.4, "x+");
+  arrow(t, -12, 7.6, "x+");
+  arrow(t, -6.2, 10.4, "x+");
+  arrow(t, -4, 3.2, "z-");
+  arrow(t, -2.2, -8, "x+");
+  arrow(t, 4, -8, "x+");
+  arrow(t, 8.4, -9.4, "z-");
+  arrow(t, 11, -14.6, "z-");
+  arrow(t, 16.2, -17, "x+");
+  arrow(t, 20, -9.6, "z+");
+  arrow(t, 22.6, 4.2, "z+");
+  arrow(t, 26, 20.6, "z-");
+  arrow(t, 26, 2, "z-", 1.8);
+  arrow(t, 26, -4, "z-", 1.8);
+  arrow(t, 28.4, 6.4, "z+");
+  arrow(t, 28.4, 14.4, "z+");
+
+  // 2) 门槛 hazard：四个洞口的进出提示，避免“看得见门、找不到边”。
+  var hz = function (x0, z0, x1, z1, y) {
+    t.slab("hazard_stripes", x0, y, z0, x1, y + 0.012, z1);
+  };
+  hz(5.6, -24, 6.4, -20, 0.004);
+  hz(5.6, -10, 6.4, -6, 0.004);
+  hz(17.55, -20, 18.35, -14, 0.004);
+  hz(14, -4.42, 17.4, -3.6, 0.004);
+
+  // 3) 失足边沿：桥面北端、中继 C 平台南沿、楼梯脚下。
+  hz(25.45, -7.46, 26.55, -7.3, 4.79);
+  hz(22.8, -5.06, 27.6, -4.9, 4.79);
+  hz(24.4, 17.5, 27.6, 18.12, 0.004);
+
+  // 4) 场地气味层：少量污渍与警戒条，避免新地面“太干净”。
+  t.decal("caution_stripes", 3, -29.6, 0.006, 7.4, "y+", 0);
+  t.decal("oil_stain", 2.2, -19.4, 0.005, 6.4, "y+", 0.7);
+  t.decal("oil_stain", 1.6, 21.2, 0.005, 24.6, "y+", 2.3);
+  t.decal("leak_stain", 2.6, 26.4, 4.806, -1.6, "y+", 0.4);
+}
+
+// ---------------------------------------------------------------- 冷库点光
+
+// 四盏点光压在天窗正下方；intensity 由 environment 的 lampOn 通过 setLights 缩放。
+function buildColdLights(levelRoot) {
+  var specs = [
+    [9, 5.35, -24],
+    [15, 5.35, -24],
+    [9, 5.35, -12],
+    [15, 5.35, -12],
+  ];
+  var out = [];
+  for (var p of specs) {
+    var light = new PointLight(0xbfd4e6, 34, 13, 2);
+    light.position.set(p[0], p[1], p[2]);
+    light.castShadow = false;
+    light.userData.baseIntensity = light.intensity;
+    levelRoot.add(light);
+    out.push(light);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- 构建期断言
+
+// 地面出生点与地面掩体必须落在导航网格的可走格里，否则 physics 会在 2m 内
+// 环形搜索把它们静默挪走（体感就是“敌人从墙里出来”）。这里在构建期自检。
+function auditNav(context) {
+  var nav = context.physics && context.physics.nav;
+  if (!nav || typeof nav.isWalkable !== "function") return;
+  var bad = [];
+  var total = 0;
+  var spawns = spawnPoints();
+  for (var i = 0; i < spawns.length; i++) {
+    var s = spawns[i];
+    if (s.pos.y > 0.5) continue;
+    total++;
+    if (!nav.isWalkable(s.pos.x, s.pos.z)) {
+      bad.push("spawn/" + s.zone + " (" + s.pos.x + ", " + s.pos.z + ")");
+    }
+  }
+  var covers = coverPoints();
+  for (var j = 0; j < covers.length; j++) {
+    var c = covers[j];
+    if (c.y > 0.5) continue;
+    total++;
+    if (!nav.isWalkable(c.x, c.z)) {
+      bad.push("cover (" + c.x + ", " + c.z + ")");
+    }
+  }
+  if (bad.length) {
+    console.warn(
+      "[tidegate] " + bad.length + "/" + total + " 个地面点不可走（会被物理静默挪走）：" + bad.join(" | "),
+    );
+  } else {
+    console.info("[tidegate] nav audit: " + total + " 个地面点全部可走");
+  }
+}
+
 // ---------------------------------------------------------------- 关卡数据
 
 function spawnPoints() {
@@ -337,15 +456,17 @@ function spawnPoints() {
     [9, -22, "coldstore"],
     [13, -22, "coldstore"],
     [16, -18, "coldstore"],
-    [9, -10, "coldstore"],
+    [10.4, -7.6, "coldstore"],
     [13, -10, "coldstore"],
     [16, -6, "coldstore"],
     [20, 22, "quay"],
     [22, 10, "quay"],
     [28, -8, "quay"],
-    [28, 12, "quay"],
+    [27, 12, "quay"],
     [20, -18, "quay"],
     [24, 26, "quay"],
+    [-21, 2, "yard"],
+    [20, -1, "quay"],
   ];
   var air = [
     [-14, 10, 14, "yard"],
@@ -359,6 +480,12 @@ function spawnPoints() {
     [27, 12, 4, "quay"],
     [20, 9, -12, "quay"],
     [26, 13, 26, "quay"],
+    [-22, 13, 8, "yard"],
+    [-8, 15, -4, "yard"],
+    [4, 11, 14, "yard"],
+    [22, 9, -22, "quay"],
+    [28, 13, 8, "quay"],
+    [12, 4.4, -16, "coldstore"],
   ];
   var out = [];
   for (var g of ground) {
@@ -376,19 +503,27 @@ function coverPoints() {
     [-20, -24], [-20, -8], [-20, 2], [-20, 16], [-20, 26],
     [-12, -24], [-12, -4], [-12, 10], [-12, 16], [-12, 28],
     [-4, -24], [-4, -2], [-4, 4], [-4, 16], [-4, 26],
-    [3.5, -24], [3.5, -6], [3.5, 4], [3.5, 14], [3.5, 24],
+    [3.5, -24], [3.5, -6], [3.5, 4], [3.5, 14], [4.6, 21],
     // 冷库内部
-    [8, -22], [8, -12], [11.6, -18], [14, -23], [16, -12], [10, -6],
+    [8, -22], [8, -12], [11.6, -18], [10.2, -24], [16, -12], [10, -6],
     // 码头
     [19.6, 8], [23, 16], [28, 24], [27, -22], [19.4, -14],
+    // Step 2 补足（通道交汇与侧翼，保证每个 zone 都有两向接近路线）
+    [-21.5, -6], [-13, -18], [-5, 20], [2.5, 12], [20, 20], [27, 4], [23.5, -26],
   ];
   var out = [];
   for (var p of pts) out.push(new Vector3(p[0], 0, p[1]));
-  // 四个箱顶掩体（y=2.59，只有玩家能上）。
+  // 十个箱顶掩体（y=2.59，只有玩家能上）。
   out.push(new Vector3(-24, 2.59, 12.5));
   out.push(new Vector3(-8, 2.59, 12.5));
   out.push(new Vector3(0, 2.59, 25));
   out.push(new Vector3(-16, 2.59, -25));
+  out.push(new Vector3(-24, 2.59, -12.5));
+  out.push(new Vector3(-8, 2.59, 25));
+  out.push(new Vector3(-16, 2.59, 12.5));
+  out.push(new Vector3(0, 2.59, -12.5));
+  out.push(new Vector3(-8, 2.59, -25));
+  out.push(new Vector3(-24, 2.59, 25));
   return out;
 }
 
