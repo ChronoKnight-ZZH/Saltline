@@ -5,8 +5,8 @@ var SHADOW_SHADER_MARKER = "// SALTLINE_SHADOW";
 
 var xf = null;
 
-function Gy(i, e, t, n, s) {
-  let o = SUN_LIGHT.dir.clone().normalize(),
+function Gy(i, e, t, n, s, dir) {
+  let o = (dir || SUN_LIGHT.dir).clone().normalize(),
     r = e.clone().add(t).multiplyScalar(0.5);
   (i.target.position.copy(r),
     i.position.copy(r).addScaledVector(o, 200),

@@ -122,13 +122,14 @@ async function createRenderer(context) {
   r.add(u.mesh);
   let h = new DirectionalLight(SUN_LIGHT.color, SUN_LIGHT.intensity);
   ((h.name = "sun"), (h.castShadow = !0));
-  let f = Gy(
-      h,
-      new Vector3(-41, -0.2, -33),
-      new Vector3(37, 32, 31),
-      new Vector3(-41, -3, -64),
-      new Vector3(72, 36, 34),
-    ),
+  // 阴影拟合使用的世界包围盒（启动时与切换时间时共用）。
+  let shadowMin = new Vector3(-41, -0.2, -33),
+    shadowMax = new Vector3(37, 32, 31),
+    shadowDepthMin = new Vector3(-41, -3, -64),
+    shadowDepthMax = new Vector3(72, 36, 34),
+    shadowFit = Gy(h, shadowMin, shadowMax, shadowDepthMin, shadowDepthMax),
+    sunDirLive = SUN_LIGHT.dir.clone(),
+    shadowTaps = context.quality.name === "low" ? 10 : 16,
     p = () =>
       Math.min(context.quality.shadow || 2048, n.capabilities.maxTextureSize);
   (h.shadow.mapSize.set(p(), p()),
@@ -139,12 +140,29 @@ async function createRenderer(context) {
     r.add(h, h.target));
   let d = !1;
   try {
-    d = installSoftShadows(f, {
-      taps: context.quality.name === "low" ? 10 : 16,
+    d = installSoftShadows(shadowFit, {
+      taps: shadowTaps,
       searchTaps: 8,
     });
   } catch (ie) {
     console.warn("[render] soft shadows unavailable: " + ie);
+  }
+  // 太阳方向变化时移动平行光并重拟合阴影视锥。
+  // 软阴影的 penumbra 尺寸以启动时的视锥常量近似；方向切换只更新相机矩阵，
+  // 避免在运行时替换全局 ShaderChunk 导致所有材质重编译。
+  function refitSun(dir) {
+    if (!dir) return;
+    let next = dir.clone();
+    if (!(next.lengthSq() > 0)) return;
+    next.normalize();
+    // 小于约 1° 的变化不重拟合（例如只切换天气时方向不变）。
+    if (sunDirLive.dot(next) > 0.99985) {
+      sunDirLive.copy(next);
+      return;
+    }
+    sunDirLive.copy(next);
+    Gy(h, shadowMin, shadowMax, shadowDepthMin, shadowDepthMax, next);
+    n.shadowMap.needsUpdate = !0;
   }
   let v = 6,
     g = [];
@@ -433,13 +451,25 @@ async function createRenderer(context) {
         if (typeof preset.sunIntensity === "number") {
           h.intensity = preset.sunIntensity;
         }
-        // M1 不移动 h.position、不重拟合阴影；阴影方向保持启动时状态，
-        // M3/M6 再接 shadows.refit()。
+        // 天气削弱直射阴影（1 = 全强度，0 = 无方向光阴影）。
+        if (typeof preset.shadowIntensity === "number") {
+          h.shadow.intensity = Math.max(
+            0,
+            Math.min(1, preset.shadowIntensity),
+          );
+        }
+        // 供后处理（太阳眩光 / 体积光）读取当前太阳可见度。
+        if (typeof preset.sunDisk === "number") {
+          h.userData.sunDisk = Math.max(0, Math.min(1, preset.sunDisk));
+        }
+        // 太阳方向决定平行光位置与阴影朝向；方向变化时重拟合阴影视锥。
+        if (preset.sunDir) refitSun(N.sunDir);
         applySkyPreset(u.mesh, {
           skyTop: preset.skyTop,
           skyHorizon: preset.skyHorizon,
           sunColor: preset.sunColor,
           sunDir: preset.sunDir ? N.sunDir : undefined,
+          sunDisk: preset.sunDisk,
         });
       },
       setSkyColors(skyTop, skyHorizon) {

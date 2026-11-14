@@ -1,5 +1,6 @@
 // DOM menus, persisted settings and controls panels.
 import { PLAYER_DIMENSIONS, QUALITY_PRESETS } from "../core/config.js";
+import { createBriefingScenes } from "./briefing-scenes.js";
 
 var SETTINGS_KEY = "saltline.settings.v1";
 
@@ -485,6 +486,7 @@ function createMenus(context, e) {
         context.params.autostart)
     ),
     briefing = { lane: null, cell: null };
+  let briefingScenes = createBriefingScenes(context);
 
   function pickCell(laneKey) {
     let cells = LANES[laneKey].cells;
@@ -549,10 +551,19 @@ function createMenus(context, e) {
           preventScroll: !0,
         });
       } catch {}
+    // 挂载 Three.js 小场景；失败则保留 CSS keyframes 降级
+    try {
+      briefingScenes.mount(o(".mb-grid"));
+    } catch (err) {
+      console.warn("[briefing] Three.js scenes unavailable: " + err);
+    }
   }
 
   function deployLane() {
     if (!briefing.lane || !briefing.cell) return;
+    try {
+      briefingScenes.unmount();
+    } catch {}
     let cell = briefing.cell;
     // TTS 必须在这一层（click 回调链）里同步发起，满足浏览器用户手势要求；
     // 一旦挪到 setTimeout / promise / flow.start 之后的异步回调，Chrome 会静默忽略。
@@ -748,6 +759,7 @@ function createMenus(context, e) {
           (s.dataset.screen = U),
           S(),
           s.classList.toggle("open", U !== "none"),
+          U !== "briefing" && briefingScenes.unmount(),
           U !== "none"
             ? U === "briefing"
               ? setTimeout(() => {

@@ -526,6 +526,10 @@ ${fe}`,
       uSunCol: {
         value: SUN_LIGHT.color.clone(),
       },
+      // 体积雾远端地平线色使用同一套 SKY_COLOR_GLSL；默认保持太阳光晕可见。
+      uSunDisk: {
+        value: 1,
+      },
     }),
     g = {
       volSunScale: 0.85,
@@ -1131,6 +1135,10 @@ ${fe}`,
     if (dt) {
       let be = H.uniforms,
         Oe = e.level && e.level.interiorBoxes && e.level.interiorBoxes[0];
+      // 体积光的太阳方向/颜色/可见度与实际平行光保持一致。
+      be.uSunDir.value.set(sunDX, sunDY, sunDZ);
+      be.uSunCol.value.copy(le.color);
+      be.uSunDisk.value = sunDisk;
       Oe
         ? (be.uBoxMin.value.copy(Oe.min),
           be.uBoxMax.value.copy(Oe.max),
@@ -1214,15 +1222,28 @@ ${fe}`,
         (G.uniforms.uThreshold.value = 0),
         l(G, y.streakB));
     }
-    (ne
-      .copy(SUN_LIGHT.dir)
+    // 平行光位置由时间预设驱动；眩光方向必须跟着实际光照方向走，
+    // 否则天空太阳盘与后处理眩光会分裂，午夜还会残留太阳眩光。
+    (ne.copy(le.position).sub(le.target.position),
+      ne.lengthSq() < 1e-8 && ne.copy(SUN_LIGHT.dir),
+      ne.normalize());
+    let sunDX = ne.x,
+      sunDY = ne.y,
+      sunDZ = ne.z;
+    ne
       .multiplyScalar(500)
       .add(re.setFromMatrixPosition(fe.matrixWorld))
-      .project(fe),
-      fe.getWorldDirection(re));
-    let Ie = re.dot(SUN_LIGHT.dir) > 0.05,
+      .project(fe);
+    fe.getWorldDirection(re);
+    let sunDisk =
+        le.userData && typeof le.userData.sunDisk === "number"
+          ? le.userData.sunDisk
+          : 1,
+      Ie = re.x * sunDX + re.y * sunDY + re.z * sunDZ > 0.05,
       Be = Math.max(Math.abs(ne.x), Math.abs(ne.y)),
-      Xe = Ie ? 1 - Math.min(1, Math.max(0, (Be - 1) / 0.3)) : 0,
+      Xe = Ie
+        ? (1 - Math.min(1, Math.max(0, (Be - 1) / 0.3))) * sunDisk
+        : 0,
       Me = ne.x * 0.5 + 0.5,
       we = ne.y * 0.5 + 0.5;
     {
@@ -1252,6 +1273,7 @@ ${fe}`,
         (E.tAdapt.value = y.adapt[m].texture),
         be.uSunUv.value.set(Me, we),
         (be.uSunOn.value = Xe),
+        be.uSunCol.value.copy(le.color),
         (be.uAspect.value = Re),
         (be.uTime.value = ae),
         (be.uBloom.value = ve.bloom ? g.bloom : 0),

@@ -25,12 +25,14 @@ float fbm3(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 3; i++){ s += a 
 
 var SKY_COLOR_GLSL = `
 uniform vec3 uSunDir, uZen, uHor, uHorAway, uSunCol;
+// 太阳盘及太阳方向的暖色光晕可见度（时间 x 天气，0..1）。
+uniform float uSunDisk;
 float skyToSun(vec3 d){ return clamp(dot(normalize(d.xz + vec2(1e-5)), normalize(uSunDir.xz)) * 0.5 + 0.5, 0.0, 1.0); }
 vec3 horizonColor(vec3 d){
   float ts = skyToSun(d);
-  vec3 c = mix(uHorAway, uHorAway * 1.25 + vec3(0.05, 0.03, 0.02), smoothstep(0.2, 0.75, ts));
-  c = mix(c, uHor * vec3(1.9, 1.55, 1.2), pow(ts, 6.0));
-  c = mix(c, vec3(1.0, 0.60, 0.24) * 3.4, pow(ts, 34.0));
+  vec3 c = mix(uHorAway, uHorAway * 1.25 + vec3(0.05, 0.03, 0.02) * uSunDisk, smoothstep(0.2, 0.75, ts));
+  c = mix(c, uHor * vec3(1.9, 1.55, 1.2), pow(ts, 6.0) * uSunDisk);
+  c = mix(c, vec3(1.0, 0.60, 0.24) * 3.4, pow(ts, 34.0) * uSunDisk);
   return c;
 }
 `;
@@ -80,11 +82,12 @@ void main(){
 
   // ---- clear sky behind / below the deck ----
   vec3 hc = horizonColor(d);
-  vec3 midC = mix(vec3(0.15, 0.24, 0.36), vec3(0.72, 0.50, 0.34), pow(ts, 3.0));   // pale band above the fire
+  // pale band above the fire: 阴雨/夜间随太阳可见度一起消失
+  vec3 midC = mix(vec3(0.15, 0.24, 0.36), vec3(0.72, 0.50, 0.34), pow(ts, 3.0) * uSunDisk);
   vec3 clearC = mix(hc, midC, smoothstep(0.0, 0.17, h));
   clearC = mix(clearC, uZen, smoothstep(0.10, 0.5, h));
   // aureole (mie glow round the sun)
-  clearC += uSunCol * vec3(1.0, 0.86, 0.68) * (pow(s, 8.0) * 0.14 + pow(s, 64.0) * 0.55 + pow(s, 600.0) * 2.2 + pow(s, 6000.0) * 14.0);
+  clearC += uSunCol * vec3(1.0, 0.86, 0.68) * (pow(s, 8.0) * 0.14 + pow(s, 64.0) * 0.55 + pow(s, 600.0) * 2.2 + pow(s, 6000.0) * 14.0) * uSunDisk;
 
   // ---- cloud deck ----
   vec2 cuv = d.xz / (h + 0.10) * vec2(0.62, 0.95);          // rolls of cloud run roughly east-west
@@ -120,10 +123,10 @@ void main(){
   cool += vec3(0.07, 0.10, 0.15) * pow(1.0 - thick, 3.0);                             // thin spots let cold light through
   // warm light raking the underside from the gap: strongest near the sun and near the deck edge
   float nearSun = pow(ts, 5.0) * exp(-max(h - edge, 0.0) * 4.5) * 0.9 + pow(s, 7.0) * 0.9;
-  vec3 warm = (uHor * vec3(1.30, 0.66, 0.40)) * nearSun * (0.05 + 2.2 * relief * relief * relief) * 1.15;
+  vec3 warm = (uHor * vec3(1.30, 0.66, 0.40)) * nearSun * (0.05 + 2.2 * relief * relief * relief) * 1.15 * uSunDisk;
   // burning rim where cloud thins at the edge of the gap
   float rim = cov * (1.0 - cov) * 4.0;
-  warm += uSunCol * rim * pow(ts, 4.0) * (0.5 + 1.6 * pow(s, 6.0)) * (1.0 - 0.85 * hole);
+  warm += uSunCol * rim * pow(ts, 4.0) * (0.5 + 1.6 * pow(s, 6.0)) * (1.0 - 0.85 * hole) * uSunDisk;
   vec3 cloudC = cool + warm;
   // sheet lightning inside the deck
   float fl = uFlash * pow(max(dot(d, uFlashDir), 0.0), 5.0);
@@ -132,20 +135,22 @@ void main(){
   cloudC = mix(cloudC, hc * 0.55 + cloudC * 0.45, exp(-h * 11.0));
 
   vec3 col = mix(clearC, cloudC, cov * 0.985);
-  vec3 scudC = mix(vec3(0.10, 0.11, 0.14), uHor * 1.5, pow(ts, 3.0)) + uSunCol * pow(s, 24.0) * 2.0;
+  vec3 scudC = mix(vec3(0.10, 0.11, 0.14), uHor * 1.5, pow(ts, 3.0)) + uSunCol * pow(s, 24.0) * 2.0 * uSunDisk;
   col = mix(col, scudC, scud);
 
   // sun disk (not in the environment capture: the directional light is the sun there)
+  // 颜色跟随预设 sunColor；uSunDisk 由时间 x 天气驱动；太阳落到地平线以下时淡出。
   float veil = (1.0 - cov * 0.92) * (1.0 - scud * 0.7);
   float disk = smoothstep(0.999905, 0.999955, mu);
-  col += vec3(1.0, 0.80, 0.52) * disk * 110.0 * veil * (1.0 - uEnv);
+  float sunUp = smoothstep(-0.02, 0.06, uSunDir.y);
+  col += uSunCol * disk * 110.0 * veil * (1.0 - uEnv) * uSunDisk * sunUp;
 
   // below the horizon: sea haze / ground bounce (mostly hidden by geometry)
   if (d.y < 0.0) {
     float t = clamp(-d.y * 5.0, 0.0, 1.0);
     vec3 low = mix(uHorAway * 0.42, vec3(0.060, 0.064, 0.070), uEnv);
     low += uHor * 0.55 * pow(ts, 6.0) * exp(d.y * 7.0);
-    col = mix(hc + uSunCol * pow(s, 48.0) * 1.5, low, smoothstep(0.0, 1.0, t));
+    col = mix(hc + uSunCol * pow(s, 48.0) * 1.5 * uSunDisk, low, smoothstep(0.0, 1.0, t));
   }
   // keep the PMREM free of fireflies
   col = mix(col, min(col, vec3(6.0)), uEnv);
@@ -187,6 +192,9 @@ function W6(i) {
     },
     uSunCol: {
       value: SUN_LIGHT.color.clone(),
+    },
+    uSunDisk: {
+      value: 1,
     },
   };
 }
@@ -243,6 +251,9 @@ function applySkyPreset(sky, preset) {
   if (p.skyTop && u.uZen && u.uZen.value) u.uZen.value.copy(p.skyTop);
   if (p.skyHorizon && u.uHor && u.uHor.value) u.uHor.value.copy(p.skyHorizon);
   if (p.sunColor && u.uSunCol && u.uSunCol.value) u.uSunCol.value.copy(p.sunColor);
+  if (typeof p.sunDisk === "number" && u.uSunDisk) {
+    u.uSunDisk.value = Math.max(0, Math.min(1, p.sunDisk));
+  }
   if (p.sunDir && u.uSunDir && u.uSunDir.value) {
     u.uSunDir.value.copy(p.sunDir);
     if (u.uSunDir.value.lengthSq() > 0) u.uSunDir.value.normalize();

@@ -1445,10 +1445,29 @@ kbd {
   margin: 8px 0 0 !important;
 }
 .mb-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: clamp(8px, 1.2vw, 16px);
   width: min(1100px, 100%);
+}
+/* Three.js 小场景画布：铺满 mb-grid，透明，不挡点击 */
+.mb-grid > canvas.briefing-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+  display: block;
+}
+/* Three.js 接管时隐藏 CSS 降级动画的前景元素（背景渐变保留） */
+.mb-grid[data-scenes="on"] .lane-anim > * {
+  display: none;
+}
+.mb-grid[data-scenes="on"] .lane-anim::after {
+  animation: none;
+  opacity: 0;
 }
 .lane-btn {
   display: flex;

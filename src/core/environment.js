@@ -110,6 +110,9 @@ function createEnvironment(context) {
         sunDir: t.sunDir,
         sunColor: t.sunColor,
         sunIntensity: t.sunIntensity,
+        // 天气驱动的直射阴影浓度与太阳盘可见度
+        shadowIntensity: t.shadowIntensity,
+        sunDisk: t.sunDisk,
         skyTop: t.skyTop,
         skyHorizon: t.skyHorizon,
       });

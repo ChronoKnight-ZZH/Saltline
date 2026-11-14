@@ -15,6 +15,8 @@ var TIME_PRESETS = {
     exposure: 1.0,
     ambient: 1.0,
     visibility: 180,
+    // 天空太阳盘可见度（0..1）。午夜没有太阳，避免在夜空画出暖白圆盘。
+    sunDisk: 1.0,
     lampOn: 0.4,
     musicMood: "calm",
   },
@@ -28,6 +30,7 @@ var TIME_PRESETS = {
     exposure: 1.05,
     ambient: 1.15,
     visibility: 220,
+    sunDisk: 1.0,
     lampOn: 0.0,
     musicMood: "bright",
   },
@@ -41,6 +44,7 @@ var TIME_PRESETS = {
     exposure: 0.95,
     ambient: 0.9,
     visibility: 160,
+    sunDisk: 1.0,
     lampOn: 0.7,
     musicMood: "warm",
   },
@@ -54,6 +58,8 @@ var TIME_PRESETS = {
     exposure: 0.7,
     ambient: 0.35,
     visibility: 90,
+    // 午夜的太阳方向实际是月光；天空不应出现太阳盘。
+    sunDisk: 0.0,
     lampOn: 1.0,
     musicMood: "dark",
   },
@@ -68,6 +74,10 @@ var WEATHER_PRESETS = {
     wetness: 0.0,
     lightning: false,
     fogMul: 1.0,
+    // 直射太阳强度与阴影浓度（0..1）
+    sunMul: 1.0,
+    // 天空太阳盘可见度倍率（0..1）
+    sunDiskMul: 1.0,
   },
   overcast: {
     visibilityMul: 0.78,
@@ -77,6 +87,8 @@ var WEATHER_PRESETS = {
     wetness: 0.2,
     lightning: false,
     fogMul: 1.25,
+    sunMul: 0.65,
+    sunDiskMul: 0.2,
   },
   lightRain: {
     visibilityMul: 0.5,
@@ -87,6 +99,8 @@ var WEATHER_PRESETS = {
     wetness: 0.6,
     lightning: true,
     fogMul: 1.6,
+    sunMul: 0.45,
+    sunDiskMul: 0.08,
   },
   heavyRain: {
     visibilityMul: 0.28,
@@ -97,6 +111,8 @@ var WEATHER_PRESETS = {
     wetness: 1.0,
     lightning: true,
     fogMul: 2.2,
+    sunMul: 0.25,
+    sunDiskMul: 0.02,
   },
 };
 
@@ -183,7 +199,10 @@ function combine(timeOfDay, weather) {
     exposure: time.exposure,
     sunDir: time.sunDir.clone(),
     sunColor: time.sunColor.clone(),
-    sunIntensity: time.sunIntensity,
+    // 天气削弱直射光；阴影浓度与太阳盘可见度同步跟随，避免"阴雨仍有硬阴影/亮太阳"。
+    sunIntensity: time.sunIntensity * w.sunMul,
+    shadowIntensity: w.sunMul,
+    sunDisk: time.sunDisk * w.sunDiskMul,
     skyTop: time.skyTop.clone(),
     skyHorizon: time.skyHorizon.clone(),
     ambient: time.ambient,
