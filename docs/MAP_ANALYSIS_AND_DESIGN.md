@@ -192,7 +192,7 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 - 复用现有夜雨预设，不改 `environment-presets`。
 - 冷库：4 盏点光（`userData.baseIntensity`，由 `setLights` 统一调光）+ 4 个 `skylights`（仅数据，不是灯）；室内亮度低于场地 40%，靠中继自发光与手电感做引导。
   - Step 2 已实现：`buildColdLights()` 生成 4 盏 `PointLight(0xbfd4e6, 34, 13, 2)`，位置压在天窗正下方 `y=5.35`（`(9,-24) (15,-24) (9,-12) (15,-12)`），挂在 `levelRoot`（不能进 `staticRoot`，否则会被合批吃掉），`setLights(on, k)` 复刻 `level.js` 的语义：`k = clamp(intensity)`、`lit = on && k > 0.05`、熄灭时 `intensity = 0`。
-  - 天窗目前仍是**几何光带 + 数据**，没有体积光柱（Step 3）。
+  - 天窗光柱已实现（Step 3）：4 根加色圆锥壳从屋面孔洞落到地面，`opacity .055` + `AdditiveBlending` + `depthWrite:false`，几何参数与 `skylights()` 数据同源。
 - 可读性三原则：①三个中继各配**唯一颜色自发光**（A 青 / B 橙 / C 白），远处可辨；②地面用 `decal` 画“去 A/B/C”标线；③栈桥边沿加 `hazard_stripes`，防止玩家在 4.8 m 处失足。
 
 ### 2.10 道具清单（只用已注册的 37 个名字）
@@ -247,11 +247,12 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 | `src/app/runtime.js` | 改 1 行 import（或加 `?map=tidegate` 分支） | 1~6 行 |
 | `docs/WIKI.md` | 若保留双图，补一节关卡清单 | 10 行 |
 
-### 3.3 真实风险（3 条，都是“会悄悄坏”的那种）
+### 3.3 真实风险（4 条，都是“会悄悄坏”的那种）
 
 1. **导航可达性**：出生点/掩体落在不可走格会被 2 m 环形搜索静默挪走，体感是“敌人从墙里出来”。Step 2 已落成构建期断言 `auditNav()`（`tidegate.js` 末尾，逐点查 `nav.isWalkable`，失败打坐标清单）。
 2. **合批与 noMerge**：中继、卷帘门、吊具这类要动的物体必须 `dynRoot` 或 `noMerge`，否则被合批进 `level-merged`，`object` 引用失效 → 交互失效。
-3. **4.8 m 栈桥的地面判定**：可行走面依赖 mesh 的 raycast，接缝 > 0.5 m 会掉下去；桥面必须整段 `catwalk` 连续铺。
+3. **4.8 m 栈桥的地面判定**：可行走面依赖 mesh 的 raycast，接缝 > 0.5 m 会掉下去；桥面必须整段 `catwalk` 连续铺。Step 3 已用真实胶囊体走完上升段→桥面→下行段（y 曲线 0→4.85→0），接缝与台阶吸附均成立。
+4. **上下梯的方向**：`stairs` 的 `yaw` 决定高端朝向，走错一侧会直接撞上 2.4 m 的立面（Step 3 回放里踩过这个坑两次，已按“绕到梯脚再上”修正路点）。
 
 ### 3.4 建议的落地顺序
 
@@ -346,10 +347,18 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 | `cover (28,4)` | `bollard_mooring (29,4)` | `(27,4)` |
 | `cover (19,-26)` | `pipe_stack (19.6,-24.6)` | `(23.5,-26)` |
 
-### 4.6 仍未做（Step 3）
+### 4.6 Step 3 落地（下行梯 / 天窗光柱 / bench / 完整通关）
 
-1. 天窗真实光柱 / 体积光，以及冷库“室内亮度低于场地 40%”的整体压暗（现在只靠 4 盏点光与材质）。
-2. 栈桥北端没有下行梯，玩家目前只能从 4.8 m 跳下。
-3. **楼梯与桥面的实际通行未做真机验证**：`stairs_metal` 每级升 0.2 m 的台阶吸附、6 段 `catwalk` 的接缝，需要能拿到 pointer lock 的手动试玩或额外的胶囊移动单测（自动化环境无法按住 W 走位）。
-4. 冷库内部视线（`interiorBoxes` 只有 1 条）、以及全局远景（直升机落在堆场空地，属 backdrop 全局资产，未按新图挪位）。
-5. `?bench=1` 性能对照与完整通关（三中继顺序自由 + 撤离）未跑。
+1. **北端下行梯**：与上升段镜像 `stairs(x, -8.9, -HALF_TURN, 2.4)` + 中间平台 + `stairs(x, -11.9, -HALF_TURN, 0)`，高端 -7.4 → 中台 -10.4 → 梯脚 -13.4；梯脚补 `hazard_stripes`，桥面/中台各补一个向下箭头。玩家不再需要从 4.8 m 跳下。
+2. **天窗光柱**：`buildLightShafts()` 给 4 个天窗各加一根加色圆锥壳（`CylinderGeometry(1.5, 2.3, 5.98, 14, 1, true)` + `MeshBasicMaterial{opacity .055, AdditiveBlending, depthWrite:false}`），做法对齐 `helicopter.js` 的 volumetric cone，只加亮空气、不参与深度，不会把货架挡成贴纸。
+3. **性能对照**（同一台机器、`?bench=1`、812×847、quality high、dpr 1.25）：
+
+| 关卡 | frame ms avg | median | p99 | fps | draw calls | tris |
+| --- | --- | --- | --- | --- | --- | --- |
+| TIDEGATE | 43.7 | 33.3 | 49.7 | 23 | 466 | 1.13 M |
+| 原图 level | 47.0 | 33.5 | 84.3 | 21 | 215 | 1.86 M |
+
+两类都在 30 fps 上限附近摆动（median 33 ms 即被 vsync 卡住）；TIDEGATE 三角面少 40%，draw call 多是因为材质组更碎。**结论：新图不比原图慢**，p99 甚至更稳。
+4. **完整通关**（确定性回放，见下方口径）：37 个路点全过，A/B/C 三点在 2.4 m 内触发，`game.state` 变为 `complete`，结算页 `SALTLINE IS DARK / CLEAN / TIME 00:55`。楼梯实测 y 曲线 `0 → 1.40 → 2.60 → 4.60 → 4.85（桥面）→ 3.80 → 1.20 → 0`，两跑台阶吸附与 6 段桥面接缝都成立。
+
+**验证口径要说明**：自动化环境的页面处于 `hidden`，rAF 停摆且 CDP 输入被宿主拒绝（`could not acquire input focus`），所以没有“真按住 W 走位”。替代做法是固定步长 `dt=1/60` 顺序调用 `input.update → game.update → player.update`（真实胶囊体、真实 `physics.moveCapsule`、真实台阶），只由脚本设 `yaw` 与 `move.y` 指路。中继“按 E 长按”这一段用引擎自带的 `game.debugCut()` 触发（走的是同一个 `me()`/`objectives` 计数路径），**E 键长按本身未验证**。

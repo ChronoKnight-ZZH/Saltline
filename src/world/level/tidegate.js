@@ -7,9 +7,21 @@
 // Step 1：分区壳体、集装箱阵列、冷库壳体与内腔、码头栈桥、三中继占位。
 // Step 2：地面导引贴花与 hazard 边沿、冷库 4 盏点光（接 setLights）、
 //         掩体补到 48、出生点补到 26 地面 + 17 空中，并在构建期做 nav 断言。
-// Step 3 待补：天窗真实光柱、栈桥北端下行梯、bench 与完整通关。
+// Step 3：栈桥北端下行梯（两跑镜像，落回码头 0m）、天窗加色光柱。
+//
+// bench 对照与完整通关在 docs/MAP_ANALYSIS_AND_DESIGN.md 4.6 记录（不在运行时代码里）。
 
-import { Group, PointLight, Vector3, defineModuleExports } from "../../vendor/three-r180.js";
+import {
+  AdditiveBlending,
+  CylinderGeometry,
+  DoubleSide,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  PointLight,
+  Vector3,
+  defineModuleExports,
+} from "../../vendor/three-r180.js";
 import { batchStaticMeshes } from "../../core/geometry.js";
 import { ob } from "./buildings.js";
 
@@ -68,6 +80,7 @@ function createTidegateLevel(context) {
 
   // 冷库点光必须挂在 levelRoot（不在 staticRoot 里，否则会进合批）。
   var lights = buildColdLights(levelRoot);
+  buildLightShafts(levelRoot);
   auditNav(context);
 
   var tris = 0;
@@ -326,6 +339,12 @@ function buildCatwalk(t, x) {
 
   // 平台边沿用护栏件做“失足提示”（hazard 材质在贴花层，Step 3 补）。
   t.place("fence_panel", 22.8, -6.2, HALF_TURN, { seed: 92 }, L.bridgeY + 0.05);
+
+  // Step 3：北端下行梯。与上升段镜像（yaw 取 -HALF_TURN，高端朝 +z），
+  // 上跑 -7.4 → -10.4（4.8 → 2.4），下跑 -10.4 → -13.4（2.4 → 0）。
+  t.stairs(x, -8.9, -HALF_TURN, 2.4, { seed: 94 });
+  slabAndCollide(t, "diamond_plate", x - 1.5, -10.7, x + 1.5, -9.4, 2.4, 2.48, "metal");
+  t.stairs(x, -11.9, -HALF_TURN, 0, { seed: 95 });
 }
 
 // ---------------------------------------------------------------- 导引层（Step 2）
@@ -334,8 +353,8 @@ function buildCatwalk(t, x) {
 // 推导结果：K=0 → 箭头指 -z；K=-π/2 → +x；K=π/2 → -x；K=π → +z。
 var DIR_ROT = { "x+": -HALF_TURN, "x-": HALF_TURN, "z+": Math.PI, "z-": 0 };
 
-function arrow(t, x, z, dir, size) {
-  t.decal("arrow", size || 2.4, x, 0.006, z, "y+", DIR_ROT[dir] || 0);
+function arrow(t, x, z, dir, size, y) {
+  t.decal("arrow", size || 2.4, x, y === undefined ? 0.006 : y, z, "y+", DIR_ROT[dir] || 0);
 }
 
 function buildGuide(t) {
@@ -358,6 +377,11 @@ function buildGuide(t) {
   arrow(t, 28.4, 6.4, "z+");
   arrow(t, 28.4, 14.4, "z+");
 
+  // Step 3：桥面 → 北端下行梯的引导（平台面 4.79 / 中间平台 2.48 / 梯脚 0）。
+  arrow(t, 26, -7.9, "z-", 1.9, 4.786);
+  arrow(t, 26, -9.9, "z-", 1.7, 2.486);
+  arrow(t, 26, -16.2, "z+", 2.2);
+
   // 2) 门槛 hazard：四个洞口的进出提示，避免“看得见门、找不到边”。
   var hz = function (x0, z0, x1, z1, y) {
     t.slab("hazard_stripes", x0, y, z0, x1, y + 0.012, z1);
@@ -371,6 +395,8 @@ function buildGuide(t) {
   hz(25.45, -7.46, 26.55, -7.3, 4.79);
   hz(22.8, -5.06, 27.6, -4.9, 4.79);
   hz(24.4, 17.5, 27.6, 18.12, 0.004);
+  // 下行梯梯脚（Step 3）：落点四周一圈，告诉玩家“到这儿就到底了”。
+  hz(24.4, -13.7, 27.6, -13.3, 0.004);
 
   // 4) 场地气味层：少量污渍与警戒条，避免新地面“太干净”。
   t.decal("caution_stripes", 3, -29.6, 0.006, 7.4, "y+", 0);
@@ -399,6 +425,34 @@ function buildColdLights(levelRoot) {
     out.push(light);
   }
   return out;
+}
+
+// 天窗光柱：四根加色圆锥壳，从屋面孔洞一直落到地面。
+// 做法对齐 helicopter.js 的 volumetric cone：AdditiveBlending + depthWrite:false，
+// 这样只加亮空气、不参与深度，不会把货架挡成“贴纸”。
+function buildLightShafts(levelRoot) {
+  var floorY = 0.02;
+  var top = L.cold.h + 0.12;
+  var h = top - floorY;
+  var beam = 0xc8dcee;
+  var shafts = skylights();
+  for (var i = 0; i < shafts.length; i++) {
+    var s = shafts[i];
+    var geo = new CylinderGeometry(1.5, 2.3, h, 14, 1, true);
+    var mat = new MeshBasicMaterial({
+      color: beam,
+      transparent: true,
+      opacity: 0.055,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      side: DoubleSide,
+      fog: false,
+    });
+    var mesh = new Mesh(geo, mat);
+    mesh.position.set(s.x, floorY + h / 2, s.z);
+    mesh.renderOrder = 2;
+    levelRoot.add(mesh);
+  }
 }
 
 // ---------------------------------------------------------------- 构建期断言
