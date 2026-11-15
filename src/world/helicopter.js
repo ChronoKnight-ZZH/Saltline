@@ -34,6 +34,14 @@ var tmpA = new Vector3();
 
 var tmpC = new Vector3();
 
+// 角度插值（处理 ±π 环绕），让机头转向不跳变
+function dampAngle(cur, target, lambda, dt) {
+  let d =
+    ((target - cur + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) -
+    Math.PI;
+  return cur + d * Math.min(1, lambda * dt);
+}
+
 // 把单位锥体（ConeGeometry(0.5, 1)：本地 y ∈ [-0.5, 0.5]，顶点在 +y）
 // 摆放成「顶点落在 origin、底面中点在 origin + dir*range」的光锥。
 //   · 顶点需在 origin  → mesh.position = origin + dir*(range/2)
@@ -62,8 +70,10 @@ function createHelicopter(context) {
     enabled: false,
     active: false,
     pos: new Vector3(),
+    prevPos: new Vector3(),
     yaw: 0,
     orbitA: 0,
+    trackT: 0,
     orbitR: HELICOPTER_TUNING.radius,
     height: HELICOPTER_TUNING.height,
     beamDir: new Vector3(),
@@ -186,14 +196,14 @@ function createHelicopter(context) {
     ensureModel();
     if (state.model) state.model.root.visible = true;
     state.orbitA = rng() * Math.PI * 2;
-    let player = context.player;
+    state.trackT = state.orbitA; // 8 字轨迹起始相位随机
+    // 初始位置：绕地图中心原点
     state.pos.set(
-      (player && player.pos ? player.pos.x : 0) +
-        Math.cos(state.orbitA) * state.orbitR,
+      Math.sin(state.trackT) * state.orbitR,
       state.height,
-      (player && player.pos ? player.pos.z : 0) +
-        Math.sin(state.orbitA) * state.orbitR,
+      Math.sin(state.trackT) * Math.cos(state.trackT) * state.orbitR,
     );
+    state.prevPos.copy(state.pos);
     // 光柱方向：向下偏，绕 Y 随机方位，M3 不旋转
     state.beamDir
       .set(0.18, -1, 0)
@@ -225,15 +235,31 @@ function createHelicopter(context) {
       return;
     let player = context.player;
     if (!player || !player.pos) return;
-    // 1. 盘旋：玩家为中心的圆，高度小幅起伏
-    state.orbitA += HELICOPTER_TUNING.speed * dt;
-    let targetX = player.pos.x + Math.cos(state.orbitA) * state.orbitR;
-    let targetZ = player.pos.z + Math.sin(state.orbitA) * state.orbitR;
-    let targetY = state.height + Math.sin(state.orbitA * 2.3) * 1.5;
-    state.pos.x = damp(state.pos.x, targetX, 2, dt);
-    state.pos.y = damp(state.pos.y, targetY, 2, dt);
-    state.pos.z = damp(state.pos.z, targetZ, 2, dt);
-    state.yaw = Math.atan2(player.pos.x - state.pos.x, player.pos.z - state.pos.z);
+    // 1. 横卧 8 字巡逻轨迹（绕地图中心原点巡航，而非玩家）：
+    //    x = R·sin t，z = R·sin t·cos t（z 向幅度减半，形成横 8 字）。
+    //    巡航速度沿轨迹脉动；战斗锁定/齐射时减速；机头始终朝运动切线方向。
+    let alertMul =
+      state.mode === "lock" || state.mode === "engage"
+        ? HELI_COMBAT.alertSpeedMul
+        : 1;
+    let speedK = 0.65 + 0.35 * Math.sin(state.trackT * 2.0); // 0.30~1.0 快慢交替
+    state.trackT +=
+      dt * HELICOPTER_TUNING.speed * 0.18 * speedK * alertMul;
+    let sx = Math.sin(state.trackT);
+    let cz = Math.cos(state.trackT);
+    let targetX = state.orbitR * sx;
+    let targetZ = state.orbitR * sx * cz;
+    let targetY = state.height + Math.sin(state.trackT * 2.0) * 4.0; // 约 24~32m 起伏
+    state.prevPos.copy(state.pos);
+    state.pos.x = damp(state.pos.x, targetX, 3.5, dt);
+    state.pos.y = damp(state.pos.y, targetY, 3.5, dt);
+    state.pos.z = damp(state.pos.z, targetZ, 3.5, dt);
+    // 机头朝运动方向（实际速度向量）；速度过小时保持原朝向避免抖头
+    tmpA.copy(state.pos).sub(state.prevPos);
+    if (tmpA.lengthSq() > 0.02) {
+      let targetYaw = Math.atan2(tmpA.x, tmpA.z);
+      state.yaw = dampAngle(state.yaw, targetYaw, 5, dt);
+    }
     // 2. 光柱几何
     state.beamOrigin.copy(state.pos);
     state.beamOrigin.y -= 0.5;

@@ -14,7 +14,7 @@ var TIME_PRESETS = {
     fogColor: SKY_COLORS.fog.clone(),
     exposure: 1.0,
     ambient: 1.0,
-    visibility: 180,
+    visibility: 45,
     // 天空太阳盘可见度（0..1）。午夜没有太阳，避免在夜空画出暖白圆盘。
     sunDisk: 1.0,
     lampOn: 0.4,
@@ -29,7 +29,7 @@ var TIME_PRESETS = {
     fogColor: new Color(0.55, 0.62, 0.72),
     exposure: 1.05,
     ambient: 1.15,
-    visibility: 220,
+    visibility: 55,
     sunDisk: 1.0,
     lampOn: 0.0,
     musicMood: "bright",
@@ -43,7 +43,7 @@ var TIME_PRESETS = {
     fogColor: new Color(0.42, 0.30, 0.28),
     exposure: 0.95,
     ambient: 0.9,
-    visibility: 160,
+    visibility: 38,
     sunDisk: 1.0,
     lampOn: 0.7,
     musicMood: "warm",
@@ -57,7 +57,7 @@ var TIME_PRESETS = {
     fogColor: new Color(0.03, 0.05, 0.08),
     exposure: 0.7,
     ambient: 0.35,
-    visibility: 90,
+    visibility: 25,
     // 午夜的太阳方向实际是月光；天空不应出现太阳盘。
     sunDisk: 0.0,
     lampOn: 1.0,
@@ -118,9 +118,10 @@ var WEATHER_PRESETS = {
 
 var DEFAULT_ENV = { timeOfDay: "dawn", weather: "clear" };
 
-// M1 只建通路，M6 按“能见度 220m 时远处目标可辨”标定。
-// noon/clear 的 fogDensity ≈ 0.02 / 220 ≈ 9.1e-5，接近原版无雾视觉。
-var FOG_K = 0.02;
+// 地图对角线约 100m，能见度压缩到 25~55m 量级才能成立"有限视野潜入"。
+// FogExp2: factor = 1 - exp(-(density*depth)^2)，depth=visibility 时 factor≈0.63。
+// density = FOG_K / visibility，要 depth=visibility 时 (density*depth)^2=1 → FOG_K=1。
+var FOG_K = 1.0;
 
 var LIGHTNING_TIMING = {
   high: 0.8,
@@ -138,9 +139,9 @@ var LIGHTNING_TIMING = {
   thunderMaskTime: 3,
 };
 
-// §6：闪光能见度峰值封顶 120m = 敌兵视距上限，
-// 避免"闪电照亮全场但敌人仍看不见你"的语义断裂。
-var LIGHTNING_PEAK_CAP = 120;
+// 地图对角线 100m，闪光峰值封顶 30m：闪电只照亮周围一小圈，
+// 不会"全场白屏"。
+var LIGHTNING_PEAK_CAP = 30;
 
 // §7：夜晴直升机（E 项占位符填实）
 var HELICOPTER_TUNING = {
