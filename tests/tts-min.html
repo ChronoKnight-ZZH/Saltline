@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>最小 TTS 冒烟页</title>
+    <style>
+      body { background:#0b0f12; color:#d7e2ea; font:14px/1.7 Consolas, "Microsoft YaHei", monospace; padding:24px; }
+      button { font:inherit; padding:8px 14px; margin-right:10px; background:#1d262e; color:#d7e2ea; border:1px solid #25313a; border-radius:6px; cursor:pointer; }
+      pre { background:#10161b; border:1px solid #25313a; padding:12px; border-radius:6px; white-space:pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <p>不引入任何项目代码、不包装任何 API 的最小用例。点击按钮才会发声（浏览器要求用户手势）。</p>
+    <button id="speak">直接 speak</button>
+    <button id="cancel-speak">cancel 后 speak</button>
+    <pre id="out"></pre>
+    <script>
+      const out = document.getElementById("out");
+      const log = [];
+      function show() {
+        out.textContent = log.join("\n");
+      }
+      function makeUtterance() {
+        const u = new SpeechSynthesisUtterance("Hello. Minimal speech test. One two three four.");
+        u.onstart = () => { log.push("start @" + Math.round(performance.now()) + "ms"); show(); };
+        u.onend = () => { log.push("end @" + Math.round(performance.now()) + "ms"); show(); };
+        u.onerror = (e) => { log.push("error: " + (e.error || "?") + " @" + Math.round(performance.now()) + "ms"); show(); };
+        return u;
+      }
+      document.getElementById("speak").addEventListener("click", () => {
+        log.length = 0;
+        log.push("voices=" + speechSynthesis.getVoices().length);
+        log.push("speak() called @" + Math.round(performance.now()) + "ms");
+        speechSynthesis.speak(makeUtterance());
+        log.push("after speak: speaking=" + speechSynthesis.speaking + " pending=" + speechSynthesis.pending);
+        show();
+        setTimeout(() => {
+          log.push("+1.5s: speaking=" + speechSynthesis.speaking + " pending=" + speechSynthesis.pending + " paused=" + speechSynthesis.paused);
+          show();
+        }, 1500);
+      });
+      document.getElementById("cancel-speak").addEventListener("click", () => {
+        log.length = 0;
+        log.push("cancel() + speak() 同帧");
+        speechSynthesis.cancel();
+        speechSynthesis.speak(makeUtterance());
+        show();
+      });
+    </script>
+  </body>
+</html>
