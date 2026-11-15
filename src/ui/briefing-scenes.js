@@ -537,6 +537,15 @@ function createBriefingScenes(context) {
       if (c) applyCell(l, c, Math.random() * 20);
     }
     resize();
+    // 首次 mount 时简报屏刚从 display:none 切到 flex、展示字体可能未加载完，
+    // 此时 getBoundingClientRect 拿到的是未稳定布局，会导致 4 个视口错位。
+    // 等下一帧布局确定后补算一次；再兜底一个短延时覆盖字体异步加载完成后的回流。
+    requestAnimationFrame(() => {
+      if (mounted) resize();
+    });
+    setTimeout(() => {
+      if (mounted) resize();
+    }, 250);
 
     mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     mq.addEventListener("change", applyReducedMotion);

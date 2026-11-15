@@ -721,11 +721,15 @@ function createMenus(context, e) {
           preventScroll: !0,
         });
       } catch {}
-    // 挂载 Three.js 小场景；失败则保留 CSS keyframes 降级
-    try {
-      briefingScenes.mount(o(".mb-grid"));
-    } catch (err) {
-      console.warn("[briefing] Three.js scenes unavailable: " + err);
+    // 挂载 Three.js 小场景；失败则保留 CSS keyframes 降级。
+    // TODO: 宽屏 1×4 布局下视口溢出卡片，暂时关闭，回退 CSS 动画，待对齐修复后改 true。
+    var BRIEFING_SCENES_ENABLED = false;
+    if (BRIEFING_SCENES_ENABLED) {
+      try {
+        briefingScenes.mount(o(".mb-grid"));
+      } catch (err) {
+        console.warn("[briefing] Three.js scenes unavailable: " + err);
+      }
     }
   }
 
