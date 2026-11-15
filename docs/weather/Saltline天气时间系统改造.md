@@ -51,17 +51,21 @@ state = {
 
 ```js
 TIME_PRESETS = {
-  dawn:     { sunDir, sunColor, sunIntensity, skyTop, skyHorizon, fogColor, exposure, ambient, visibility: 180, lampOn: 0.4, musicMood: "calm" },
-  noon:     { ... visibility: 220, lampOn: 0.0, musicMood: "bright" },
-  dusk:     { ... visibility: 160, lampOn: 0.7, musicMood: "warm" },
-  midnight: { ... visibility: 90,  lampOn: 1.0, musicMood: "dark" },
+  dawn:     { sunDir, sunColor, sunIntensity, skyTop, skyHorizon, fogColor, exposure, ambient, visibility: 45, lampOn: 0.4, musicMood: "calm" },
+  noon:     { ... visibility: 55, lampOn: 0.0, musicMood: "bright" },
+  dusk:     { ... visibility: 38, lampOn: 0.7, musicMood: "warm" },
+  midnight: { ... visibility: 25, lampOn: 1.0, musicMood: "dark" },
 }
+
+// 注：地图仅 80×60m（对角线 100m），能见度整体压缩一个量级，
+// 否则 noon 220m 视野已远超地图边界，潜入无意义。
+// FOG_K = 1.0（原 0.02），让雾真正生效。
 
 WEATHER_PRESETS = {
   clear:     { visibilityMul: 1.00, audioMask: 0.00, spreadScale: 1.00, rainLevel: 0.0, wetness: 0.0, lightning: false, fogMul: 1.00 },
   overcast:  { visibilityMul: 0.78, audioMask: 0.10, spreadScale: 1.00, rainLevel: 0.0, wetness: 0.2, lightning: false, fogMul: 1.25 },
-  lightRain: { visibilityMul: 0.50, audioMask: 0.50, spreadScale: 1.05, rainLevel: 0.45, wetness: 0.6, lightning: true,  fogMul: 1.60 },
-  heavyRain: { visibilityMul: 0.28, audioMask: 0.72, spreadScale: 1.15, rainLevel: 1.0, wetness: 1.0, lightning: true,  fogMul: 2.20 },
+  lightRain: { visibilityMul: 0.50, audioMask: 0.50, spreadScale: 1.15, rainLevel: 0.45, wetness: 0.6, lightning: true,  fogMul: 1.60 },
+  heavyRain: { visibilityMul: 0.28, audioMask: 0.72, spreadScale: 1.35, rainLevel: 1.0, wetness: 1.0, lightning: true,  fogMul: 2.20 },
 }
 ```
 
@@ -82,9 +86,9 @@ target.helicopterEnabled = (timeOfDay === "midnight") && !weather.lightning
 
 ```js
 visibility = {
-  base:     target.visibility,          // 目标基础能见距离
+  base:     target.visibility,          // 目标基础能见距离（已压缩：25~55m）
   current:  number,                     // 当前实际能见距离
-  lightningPeak: min(base * 3.5, 200),  // 闪电峰值
+  lightningPeak: Math.min(base * 1.3, 30),  // 闪电峰值硬上限 30m（原 200m 已废弃）
   lightningT: 0,                        // 闪电高能窗口剩余时间
 }
 ```
@@ -374,3 +378,54 @@ return min(mask, 0.85)                      // 上限，避免完全听不见
 ## 8. 唯一遗留待定
 
 **设置面板切换时机**：仅标题/暂停菜单可切（推荐，避免战斗中重烘焙打断），还是游戏中随时可切？此点不影响架构，只影响 `menus.js` 的 `panelOpen` 与 `flow` 的暂停联动，可在 M2 前确认。
+
+---
+
+## 9. 实机校准记录（v1.1，2026-11-15）
+
+### 9.1 能见度压缩
+
+原设计 dawn 180 / noon 220 / dusk 160 / midnight 90 是按"开放世界"思路给的，但实际地图只有 **80×60m（对角线 100m）**：
+
+- noon 220m 视野 = 站在地图一头能看到另一头外 120m，潜入完全不成立
+- midnight 90m 仍能看穿整张地图，夜晚没有压迫感
+
+**校准后**：
+
+| 时段 | 原 visibility | 现 visibility | 说明 |
+|---|---|---|---|
+| dawn | 180 | **45** | 清晨薄雾，刚好看清一个街区 |
+| noon | 220 | **55** | 晴天最亮，但仍被集装箱/建筑遮挡 |
+| dusk | 160 | **38** | 黄昏雾气加重 |
+| midnight | 90 | **25** | 黑夜，基本只靠路灯/月光 |
+
+### 9.2 雾密度
+
+- `FOG_K` 从 **0.02 → 1.0**，让雾真正生效（原来雾几乎看不见）
+- `target.fogDensity = FOG_K / target.visibility * weather.fogMul`
+
+### 9.3 闪电峰值
+
+- 原 `min(base * 3.5, 200)` → 现 `Math.min(base * 1.3, 30)`
+- 闪电 0.8s 内把视野拉到 30m（约 2~3 个街区），让玩家和敌人互相看见一眼，然后立刻回到雾里
+- 雷声延迟 1.2~2.5s 后到，期间雨声遮蔽增强，给玩家一个"雷声掩护"的移动窗口
+
+### 9.4 天气倍率（已实装）
+
+| 天气 | visibilityMul | spreadScale | audioMask |
+|---|---|---|---|
+| clear | 1.00 | 1.00 | 0.00 |
+| overcast | 0.78 | 1.00 | 0.10 |
+| lightRain | 0.50 | **1.15** | 0.50 |
+| heavyRain | 0.28 | **1.35** | 0.72 |
+
+### 9.5 各时段实际能见距离（visibility × visibilityMul）
+
+| 时段 \ 天气 | clear | overcast | lightRain | heavyRain |
+|---|---|---|---|---|
+| noon (55) | 55 | 43 | 28 | 15 |
+| dawn (45) | 45 | 35 | 23 | 13 |
+| dusk (38) | 38 | 30 | 19 | 11 |
+| midnight (25) | 25 | 20 | 13 | 7 |
+
+暴雨夜（heavyRain × midnight）视野仅 7m，相当于贴脸才看得见——这是霰弹枪/近战的天堂，也是狙击枪的坟场。
