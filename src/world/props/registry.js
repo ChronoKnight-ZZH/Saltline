@@ -37,6 +37,8 @@ var PROP_SIZES = {
   cardboard_boxes: [1, 0.8, 0.8, "cardboard", "wood"],
   pipe_stack: [6, 0.9, 1.2, "steel_rust", "metal"],
   sign_post: [0.6, 2.4, 0.08, "paint_white", "metal"],
+  // M6.0 弹药补给箱：箱体沿用 crate_wood 的 1.1×1×0.9，顶上多一个状态灯。
+  supply_crate: [1.1, 1.05, 0.9, "wood_pallet", "metal"],
 };
 
 var PROP_BUILDERS = {};

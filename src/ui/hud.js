@@ -326,7 +326,8 @@ function createHUD(context) {
       );
       Hx.appendChild(el);
       exposedMarks.set(k, { el, life: ce, dist: 0 });
-    },    setPrompt(k, ce = 0) {      let ve = !!k;
+    },    // 第三个参数 { tap }：一次性交互显示 "Press E —"，按住类交互（继电器）仍显示 "Hold E —"。
+    setPrompt(k, ce = 0, P = {}) {      let ve = !!k;
       if (
         (ve !== X.promptOn &&
           ((X.promptOn = ve),
@@ -344,7 +345,7 @@ function createHUD(context) {
         ((X.promptKey = _e),
         (_.textContent = _e),
         _.classList.toggle("wide", _e.length > 1));
-      let Te = `Hold ${_e} \u2014 ${k}`;
+      let Te = `${P && P.tap ? "Press" : "Hold"} ${_e} \u2014 ${k}`;
       Te !== X.promptText && ((X.promptText = Te), (M.textContent = Te));
       let Pe = Math.round(ce * 200) / 200;
       Pe !== X.promptT &&

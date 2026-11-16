@@ -21,6 +21,7 @@ import { createWeapon } from "../weapons/weapon.js";
 import { createEnemies } from "../enemies/enemies.js";
 import { createHUD } from "../ui/hud.js";
 import { createGameFlow } from "../game/flow.js";
+import { createSupply } from "../game/supply.js";
 import { SHOWCASE_MODULES } from "./showcases.js";
 import { showFatalError } from "./diagnostics.js";
 import { bootElement, setBootProgress } from "./boot-screen.js";
@@ -205,6 +206,15 @@ async function startGame() {
       (context.combat = createCombat(context)),
       await setBootProgress("Checking the rifle", 0.74),
       await initializeSystem("weapon", "weapon", () => createWeapon(context)),
+      // M6.0：弹药补给点。只依赖 level.supplySpots 与已 build 的物理栅格，
+      // 失败不阻断开局（flow 里对 context.supply 做了存在性判断）。
+      (() => {
+        try {
+          context.supply = createSupply(context);
+        } catch (e) {
+          ((context.supply = null), console.error("[supply] init failed", e));
+        }
+      })(),
       await setBootProgress("Waking the Harbormaster", 0.82),
       await initializeSystem("enemies", "enemies", () =>
         createEnemies(context),

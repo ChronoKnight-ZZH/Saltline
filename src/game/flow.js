@@ -295,6 +295,8 @@ function createGameFlow(context) {
       a(context.fx, "clear"),
       a(context.combat, "reset"),
       a(context.weapon, "reset"),
+      // M6.0：补给点每局重置一次（设计稿：一次性，不按时间刷新）。
+      a(context.supply, "reset"),
       (c.time = 0),
       (c.cut = 0),
       (c.allCut = !1),
@@ -686,6 +688,29 @@ function createGameFlow(context) {
     }
     return P;
   }
+  // M6.0：继电器优先，身边没有继电器时才轮到弹药补给点。
+  // 补给是"按一下"（pressed 走边沿），不是继电器那种"按住"。
+  function supplyPrompt() {
+    let P = context.supply;
+    if (!P || typeof P.nearest != "function" || !n.alive)
+      return (o.setPrompt && o.setPrompt(null), undefined);
+    let V = P.nearest(n.pos, n.forward);
+    if (!V || P.usable(V) === "used")
+      return (o.setPrompt && o.setPrompt(null), undefined);
+    if (P.usable(V) === "emp")
+      return (
+        o.setPrompt && o.setPrompt("EMP \u2014 lock offline", 0, { tap: !0 }),
+        undefined
+      );
+    o.setPrompt && o.setPrompt("resupply from " + (V.label || V.id), 0, { tap: !0 });
+    if (!r.pressed("interact")) return;
+    let res = a(P, "use", V);
+    if (res === "full")
+      o.message && o.message("Ammo full", 1.6);
+    else if (res === "channel") o.setPrompt && o.setPrompt(null);
+    else if (res === null)
+      (o.message && o.message("Resupplied", 1.6), o.setPrompt && o.setPrompt(null));
+  }
   function ue(P) {
     let V = n.alive ? $() : null;
     for (let L of c.relays)
@@ -709,7 +734,7 @@ function createGameFlow(context) {
               }))));
     V && !V.cut
       ? o.setPrompt && o.setPrompt("Cut relay " + V.short, saturate(V.t))
-      : o.setPrompt && o.setPrompt(null);
+      : supplyPrompt();
     let Y = s.extraction;
     if (Y && Y.pos) {
       let L = Math.hypot(Y.pos.x - n.pos.x, Y.pos.z - n.pos.z),

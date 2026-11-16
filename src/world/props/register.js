@@ -20,6 +20,7 @@ import {
 import { registerDetailedProps } from "./detailed-builders.js";
 import { registerCharacterProps } from "./character-builders.js";
 import { registerCargoProps } from "./cargo-builders.js";
+import { buildSupplyCrate } from "./supply-builders.js";
 
 for (let i of ["container20", "container40", "container40hc"])
   registerProp(i, (e, t) => buildBasicContainer(e, i, t));
@@ -57,3 +58,6 @@ registerDetailedProps(registerProp);
 registerCharacterProps(registerProp);
 
 registerCargoProps(registerProp);
+
+// M6.0：补给箱必须在 registerDetailedProps 之后注册，因为它内部调用 crate_wood。
+registerProp("supply_crate", buildSupplyCrate);

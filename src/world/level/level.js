@@ -2,6 +2,7 @@ import { Group, defineModuleExports } from "../../vendor/three-r180.js";
 import { batchStaticMeshes } from "../../core/geometry.js";
 import { ab, no, ob, rb } from "./buildings.js";
 import { Lr, cb, fR, hR, lv, mt, ts } from "./placement.js";
+import { SUPPLY_POINTS } from "./supply-points.js";
 
 var levelShowcaseModule = {};
 
@@ -369,6 +370,64 @@ async function createLevel(context) {
     y.forEach((z) => {
       z.type === "ground" && E(z.pos);
     }));
+  // M6.0 弹药补给点：按"周围能站人的空间"挑落点，再放置。
+  // 设计稿坐标在实测地图上有贴箱、甚至落在集装箱里/码头边界上的（见 supply-points.js 注释），
+  // 单纯吸附到最近可走格会把人推进箱缝里，所以这里在 6m 内给每个候选点打分：
+  // 1.6m 环上 16 个方向还有几个能站人 —— 分高者优先，同分取离设计点更近的。
+  // 顺序不能反：箱子一 place 就把自己的碰撞盒写进物理，该格随后就不可走了。
+  // 放置走 dynamic，否则会被静态合批吃掉（道具的 update / setState 会丢）。
+  let fit = (z, H) => {
+    let O = 0;
+    for (let q = 0; q < 16; q++) {
+      let U = q * 0.3927;
+      M.isWalkable(
+        z + Math.cos(U) * 1.6,
+        H + Math.sin(U) * 1.6,
+      ) && O++;
+    }
+    return O;
+  };
+  let R = SUPPLY_POINTS.map((z) => {
+    let H = mt(z.x, 0, z.z);
+    if (M && M.isWalkable) {
+      let O = -1e9,
+        q = z.x,
+        U = z.z;
+      for (let T = 0; T <= 6; T += 0.5)
+        for (let D = 0; D < (T ? 16 : 1); D++) {
+          let C = D * 0.3927,
+            G = z.x + Math.cos(C) * T,
+            j = z.z + Math.sin(C) * T;
+          if (!M.isWalkable(G, j)) continue;
+          let N = fit(G, j) * 10 - T;
+          N > O && ((O = N), (q = G), (U = j));
+        }
+      O > -1e9 && ((H.x = q), (H.z = U));
+    }
+    let O = Math.hypot(H.x - z.x, H.z - z.z);
+    console.warn(
+      "[level] supply " + z.id + " at (" + H.x.toFixed(2) + ", " +
+        H.z.toFixed(2) + ") moved " + O.toFixed(2) + "m, room " +
+        (M && M.isWalkable ? fit(H.x, H.z) : -1) + "/16",
+    );
+    let q = t.place(
+      "supply_crate",
+      H.x,
+      H.z,
+      z.yaw,
+      { seed: z.seed, kind: z.kind, id: z.id, label: "AMMO" },
+      0,
+      { dynamic: !0 },
+    );
+    return {
+      id: z.id,
+      kind: z.kind,
+      label: z.label,
+      pos: mt(H.x, 0, H.z),
+      object: q,
+      used: !1,
+    };
+  });
   let w = !1;
   return {
     root: e,
@@ -378,6 +437,8 @@ async function createLevel(context) {
       pos: s.extraction.clone(),
       radius: 2.5,
     },
+    // M6.0：5 个弹药补给点（id / kind / label / pos / object），由 src/game/supply.js 接管。
+    supplySpots: R,
     enemySpawns: y,
     zones: b,
     interiorBoxes: m,
@@ -393,6 +454,7 @@ async function createLevel(context) {
       labelsAtlased: h.count,
       containers: t.placed.filter((z) => z.name.startsWith("container")).length,
       props: t.placed.length,
+      supplies: R.length,
       tris: Math.round(p),
       meshes: f.children.length + pR(t.dynRoot),
     },
