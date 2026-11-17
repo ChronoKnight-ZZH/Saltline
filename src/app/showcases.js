@@ -2,6 +2,7 @@ import { rendererShowcaseModule } from "../render/renderer.js";
 import { materialsShowcaseModule } from "../render/materials/materials.js";
 import { propsShowcaseModule } from "../world/props/props.js";
 import { levelShowcaseModule } from "../world/level/level.js";
+import { tidegateShowcaseModule } from "../world/level/tidegate.js";
 import { backdropShowcaseModule } from "../world/backdrop/backdrop.js";
 import { groundShowcaseModule } from "../world/ground/ground.js";
 import { effectsShowcaseModule } from "../effects/effects.js";
@@ -12,6 +13,7 @@ import { environmentShowcaseModule } from "../core/environment.js";
 var SHOWCASE_MODULES = {
   mats: materialsShowcaseModule,
   level: levelShowcaseModule,
+  tidegate: tidegateShowcaseModule,
   backdrop: backdropShowcaseModule,
   ground: groundShowcaseModule,
   fx: effectsShowcaseModule,

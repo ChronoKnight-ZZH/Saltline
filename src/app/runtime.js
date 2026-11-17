@@ -10,6 +10,7 @@ import { createMaterials } from "../render/materials/materials.js";
 import { createPhysics } from "../world/physics.js";
 import { createProps } from "../world/props/props.js";
 import { createLevel } from "../world/level/level.js";
+import { createTidegateLevel } from "../world/level/tidegate.js";
 import { createBackdrop } from "../world/backdrop/backdrop.js";
 import { createGround } from "../world/ground/ground.js";
 import { createEffects } from "../effects/effects.js";
@@ -178,7 +179,15 @@ async function startGame() {
   } else {
     if (
       (await setBootProgress("Stacking containers", 0.34),
-      await initializeSystem("level", "level", () => createLevel(context), !0),
+      await initializeSystem(
+        "level",
+        "level",
+        () =>
+          params.map === "tidegate"
+            ? createTidegateLevel(context)
+            : createLevel(context),
+        !0,
+      ),
       await setBootProgress("Raising the cranes", 0.5),
       await initializeSystem("backdrop", "backdrop", () =>
         createBackdrop(context),

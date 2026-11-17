@@ -66,6 +66,69 @@ var LANES = {
 
 var LANE_ORDER = ["recon", "assault", "stealth", "balanced"];
 
+// ---- 地图选择：一个关卡一张卡 ----
+// 卡片只放“选之前必须知道”的东西：是哪块地、怎么结束、新不新。
+// 缩略图是纯 SVG 的平面示意（不引外部图片，单文件构建里也不多一个请求）。
+// id 对应 runtime 的 ?map= 参数：level = 原版 Saltline，tidegate = 新图。
+var MAPS = [
+  {
+    id: "level",
+    name: "Saltline Terminal",
+    tagline: "Berth 4 \xB7 container yard \xB7 boat at the west quay",
+    badge: "Original",
+    brief: "Wide apron, crane lanes and stacked boxes. Three uplinks feed the boat.",
+  },
+  {
+    id: "tidegate",
+    name: "Tidegate",
+    tagline: "Cold-store quay \xB7 raised catwalk \xB7 boat at the north pier",
+    badge: "New",
+    brief: "Long waterfront sightlines. Climb the catwalk for the last uplink.",
+  },
+];
+
+// 平面示意：一堆矩形拼出的关卡轮廓，颜色只用地板灰 + 信号橙。
+function mapThumbMarkup(id) {
+  if (id === "tidegate") {
+    return `<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+      <rect x="0" y="0" width="160" height="90" fill="#14181b"/>
+      <rect x="0" y="64" width="160" height="26" fill="#1d2a31"/>
+      <rect x="6" y="26" width="26" height="32" fill="#2a3137" stroke="#4a535a"/>
+      <rect x="36" y="20" width="34" height="44" fill="#242b30" stroke="#3d464d"/>
+      <rect x="38" y="22" width="7" height="7" fill="#323a40"/>
+      <rect x="49" y="22" width="7" height="7" fill="#323a40"/>
+      <rect x="38" y="34" width="7" height="7" fill="#323a40"/>
+      <rect x="60" y="30" width="8" height="8" fill="#323a40"/>
+      <rect x="76" y="14" width="22" height="50" fill="#20272c" stroke="#ffb347" stroke-width="1.4"/>
+      <rect x="80" y="18" width="14" height="10" fill="#2c353b"/>
+      <line x1="78" y1="46" x2="96" y2="55" stroke="#4a535a"/>
+      <rect x="104" y="26" width="30" height="34" fill="#243036" stroke="#4a535a"/>
+      <rect x="134" y="22" width="18" height="46" fill="#20282e" stroke="#4a535a"/>
+      <line x1="98" y1="40" x2="140" y2="40" stroke="#ffb347" stroke-width="2"/>
+      <circle cx="140" cy="40" r="2.6" fill="#ffb347"/>
+    </svg>`;
+  }
+  return `<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    <rect x="0" y="0" width="160" height="90" fill="#14181b"/>
+    <rect x="0" y="62" width="160" height="28" fill="#1d2a31"/>
+    <rect x="8" y="12" width="112" height="50" fill="#232a2f" stroke="#3d464d"/>
+    <rect x="14" y="17" width="12" height="9" fill="#323a40"/>
+    <rect x="30" y="17" width="12" height="9" fill="#323a40"/>
+    <rect x="46" y="17" width="12" height="9" fill="#323a40"/>
+    <rect x="62" y="17" width="12" height="9" fill="#323a40"/>
+    <rect x="14" y="30" width="12" height="9" fill="#323a40"/>
+    <rect x="30" y="30" width="12" height="9" fill="#323a40"/>
+    <rect x="46" y="30" width="12" height="9" fill="#323a40"/>
+    <rect x="62" y="30" width="12" height="9" fill="#323a40"/>
+    <rect x="82" y="20" width="16" height="34" fill="#2a3238" stroke="#4a535a"/>
+    <line x1="96" y1="20" x2="112" y2="10" stroke="#4a535a"/>
+    <line x1="20" y1="44" x2="44" y2="44" stroke="#ffb347" stroke-width="2"/>
+    <line x1="44" y1="52" x2="68" y2="52" stroke="#ffb347" stroke-width="2"/>
+    <line x1="68" y1="44" x2="92" y2="38" stroke="#ffb347" stroke-width="2"/>
+    <circle cx="24" cy="56" r="2.6" fill="#ffb347"/>
+  </svg>`;
+}
+
 var TIME_TEXT = {
   dawn: "First light.",
   noon: "High sun.",
@@ -305,6 +368,30 @@ function createMenus(context, e) {
       </aside>
     </section>
 
+    <section class="m-screen m-maps" data-s="maps" aria-label="Select a map">
+      <div class="mb-head">
+        <div class="m-k">Operation zone</div>
+        <h2 class="mb-h">Choose your ground</h2>
+      </div>
+      <div class="map-grid">
+        ${MAPS.map(
+          (m) => `
+          <button class="map-card" data-map="${m.id}" aria-pressed="false">
+            <div class="map-thumb">${mapThumbMarkup(m.id)}<em class="map-badge">${m.badge}</em></div>
+            <div class="map-body">
+              <b>${m.name}</b>
+              <span>${m.tagline}</span>
+              <i>${m.brief}</i>
+            </div>
+          </button>`,
+        ).join("")}
+      </div>
+      <div class="mb-actions">
+        <button class="btn" data-act="back-title">Back</button>
+        <button class="btn primary" data-act="deploy-map" disabled>Continue</button>
+      </div>
+    </section>
+
     <section class="m-screen m-card" data-s="paused" aria-label="Paused">
       <div class="m-k">Operation on hold</div>
       <h2 class="m-h">Paused</h2>
@@ -314,7 +401,7 @@ function createMenus(context, e) {
         <button class="btn primary" data-act="resume">Resume</button>
         <button class="btn" data-act="settings">Settings</button>
         <button class="btn" data-act="controls">Controls</button>
-        <button class="btn" data-act="restart">Restart mission</button>
+        <button class="btn" data-act="toTitle">Return to title</button>
       </div>
     </section>
 
@@ -488,6 +575,73 @@ function createMenus(context, e) {
     briefing = { lane: null, cell: null };
   let briefingScenes = createBriefingScenes(context);
 
+  // ---- 地图选择 ----
+  // 流程：Deploy → 地图卡片 → 天气（briefing 的 lane 网格）→ 开局。
+  // 没有天气选择（briefingEnabled=false）时，确认地图即直接开局。
+  let mapChoice = null;
+
+  function currentMapId() {
+    return context.params && context.params.map === "tidegate"
+      ? "tidegate"
+      : "level";
+  }
+
+  function syncMapCards() {
+    for (let b of r(".map-card"))
+      b.setAttribute("aria-pressed", String(b.dataset.map === mapChoice));
+    let go = o('[data-act="deploy-map"]');
+    if (go) go.disabled = !mapChoice;
+  }
+
+  function showMaps() {
+    // 预选已经加载的那张图：用户不改选择时不会触发重载。
+    mapChoice = currentMapId();
+    syncMapCards();
+    // 与 showBriefing 同款写法：直接改 DOM，不依赖后面才定义的 q.show。
+    try {
+      briefingScenes.unmount();
+    } catch {}
+    ((p = "maps"),
+      s.classList.add("open"),
+      (s.dataset.screen = "maps"),
+      S());
+    let first = o(`.map-card[data-map="${mapChoice}"]`) || o(".map-card");
+    if (first)
+      try {
+        first.focus({
+          preventScroll: !0,
+        });
+      } catch {}
+  }
+
+  // 换图要重建整关卡（scene root、物理、nav、backdrop 都在启动期装配），
+  // 所以换图走一次带参数的重新进入；brief=1 让重载后直接落到天气选择，而不是又回标题。
+  function switchMap(id) {
+    let url = new URL(location.href);
+    if (id === "tidegate") url.searchParams.set("map", "tidegate");
+    else url.searchParams.delete("map");
+    url.searchParams.delete("autostart");
+    url.searchParams.delete("shot");
+    url.searchParams.delete("bench");
+    if (briefingEnabled) url.searchParams.set("brief", "1");
+    else url.searchParams.delete("brief");
+    location.assign(url.toString());
+  }
+
+  function confirmMap() {
+    if (!mapChoice) return;
+    if (mapChoice !== currentMapId()) {
+      switchMap(mapChoice);
+      return;
+    }
+    if (briefingEnabled) {
+      showBriefing();
+      return;
+    }
+    // 这张图没有天气/时段选择：跳过简报，直接开局。
+    (context.events.emit("ui:click", {}), e.deploy && e.deploy());
+  }
+
   function pickCell(laneKey) {
     let cells = LANES[laneKey].cells;
     return cells[Math.floor(Math.random() * cells.length)];
@@ -567,11 +721,15 @@ function createMenus(context, e) {
           preventScroll: !0,
         });
       } catch {}
-    // 挂载 Three.js 小场景；失败则保留 CSS keyframes 降级
-    try {
-      briefingScenes.mount(o(".mb-grid"));
-    } catch (err) {
-      console.warn("[briefing] Three.js scenes unavailable: " + err);
+    // 挂载 Three.js 小场景；失败则保留 CSS keyframes 降级。
+    // TODO: 宽屏 1×4 布局下视口溢出卡片，暂时关闭，回退 CSS 动画，待对齐修复后改 true。
+    var BRIEFING_SCENES_ENABLED = false;
+    if (BRIEFING_SCENES_ENABLED) {
+      try {
+        briefingScenes.mount(o(".mb-grid"));
+      } catch (err) {
+        console.warn("[briefing] Three.js scenes unavailable: " + err);
+      }
     }
   }
 
@@ -675,13 +833,20 @@ function createMenus(context, e) {
       selectLane(T.dataset.lane);
       return;
     }
+    // 地图卡片：选中即预览，Continue 才进下一步。
+    if (T.dataset.map && p === "maps") {
+      ((mapChoice = T.dataset.map), syncMapCards());
+      return;
+    }
     let D = T.dataset.act;
     D === "deploy"
-      ? briefingEnabled
-        ? showBriefing()
-        : e.deploy && e.deploy()
-      : D === "reroll"
-        ? rerollLane()
+      ? showMaps()
+      : D === "deploy-map"
+        ? confirmMap()
+        : D === "back-title"
+          ? q.show("title")
+          : D === "reroll"
+            ? rerollLane()
         : D === "deploy-lane"
           ? deployLane()
           : D === "settings"
@@ -725,19 +890,23 @@ function createMenus(context, e) {
           : !U.shiftKey &&
             document.activeElement === C &&
             (D.focus(), U.preventDefault());
-      } else if (U.code === "Tab" && p === "briefing") {
-        // 简报屏幕的 Tab 只在卡片与两个按钮之间循环（跳过 disabled）。
-        let T = [...r(".lane-btn"), o('[data-act="reroll"]'), o('[data-act="deploy-lane"]')].filter(
-          (G) => G && !G.disabled,
-        );
-        if (!T.length) return;
-        let D = T[0],
+      } else if (U.code === "Tab" && (p === "briefing" || p === "maps")) {
+        // 简报/地图屏幕的 Tab 只在卡片与按钮之间循环（跳过 disabled）。
+        let T = [
+            ...r(p === "maps" ? ".map-card" : ".lane-btn"),
+            ...r(".m-screen[data-s='" + p + "'] .m-actions button, .mb-actions button"),
+          ].filter((G) => G && !G.disabled),
+          D = T[0],
           C = T[T.length - 1];
+        if (!T.length) return;
         U.shiftKey && document.activeElement === D
           ? (C.focus(), U.preventDefault())
           : !U.shiftKey &&
             document.activeElement === C &&
             (D.focus(), U.preventDefault());
+      } else if (U.code === "Escape" && p === "maps") {
+        // 地图选择可以退回标题；天气选择不行（必须选一条 lane 才能开局）。
+        (q.show("title"), U.stopPropagation(), U.preventDefault());
       }
     }));
   let O = (U) => (
