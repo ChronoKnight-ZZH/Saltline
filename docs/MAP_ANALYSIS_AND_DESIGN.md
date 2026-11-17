@@ -187,13 +187,15 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 - 救生艇 `backdrop.extractionPoint = (30, 0, 20)`；两者相距 1.5 m，视觉上是“走到舷梯边”。
 - 撤离走廊 `z ∈ [12, 28]` 保持**无高遮挡**，让最后一波 Gull 从海面方向压进来。
 
-### 2.9 光、雨、可读性
+### 2.9 光、天气、可读性
 
-- 复用现有夜雨预设，不改 `environment-presets`。
+- 天气**锁定为暴风雪**（`MAP_WEATHER_LOCK = { tidegate: ["blizzard"] }`），该图不再提供 clear/overcast/lightRain/heavyRain；菜单只给 Dawn/Noon/Dusk/Midnight 四张白毛风卡（固定 `blizzard`，只换时段）。天气数值与设计稿的平移过程见 [`docs/weather/TIDEGATE暴风雪数值平移.md`](weather/TIDEGATE暴风雪数值平移.md)。
+- 雪档的关键读数（`combine(时段, "blizzard")`）：能见度 dawn 21.6 / noon 26.4 / dusk 19.2 / midnight 10.8 m；`fogOptical 0.90`（能见度处九成被雪幕吃掉）；`audioMask 0.82`；`spreadScale 1.40`（> heavyRain 1.35，不出现「风雪比暴雨更准」的倒挂）；`sunMul 0.10`（近全漫射、无硬阴影）；直升机停飞；雷雪 60–120s 一次。
 - 冷库：4 盏点光（`userData.baseIntensity`，由 `setLights` 统一调光）+ 4 个 `skylights`（仅数据，不是灯）；室内亮度低于场地 40%，靠中继自发光与手电感做引导。
   - Step 2 已实现：`buildColdLights()` 生成 4 盏 `PointLight(0xbfd4e6, 34, 13, 2)`，位置压在天窗正下方 `y=5.35`（`(9,-24) (15,-24) (9,-12) (15,-12)`），挂在 `levelRoot`（不能进 `staticRoot`，否则会被合批吃掉），`setLights(on, k)` 复刻 `level.js` 的语义：`k = clamp(intensity)`、`lit = on && k > 0.05`、熄灭时 `intensity = 0`。
   - 天窗光柱已实现（Step 3）：4 根加色圆锥壳从屋面孔洞落到地面，`opacity .055` + `AdditiveBlending` + `depthWrite:false`，几何参数与 `skylights()` 数据同源。
 - 可读性三原则：①三个中继各配**唯一颜色自发光**（A 青 / B 橙 / C 白），远处可辨；②地面用 `decal` 画“去 A/B/C”标线；③栈桥边沿加 `hazard_stripes`，防止玩家在 4.8 m 处失足。
+- 暴雪下的可读性补偿：中继自发光是雪幕里唯一能穿透 20m 的参照（灯色不受雾色影响）；栈桥边沿的 `hazard_stripes` 在 11m 能见度下成为近场导航线；雷雪闪光把能见度短暂抬到 37.8m（10.8×3.5），是唯一看清远场的机会。
 
 ### 2.10 道具清单（只用已注册的 37 个名字）
 

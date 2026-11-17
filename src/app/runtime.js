@@ -31,11 +31,14 @@ import { createEnvironment } from "../core/environment.js";
 import { createHelicopter } from "../world/helicopter.js";
 import { createLightning } from "../effects/lightning.js";
 import { createSolarFlare } from "../effects/solarflare.js";
+import { createSnow } from "../effects/snow.js";
 import { createEnemyOutline } from "../render/enemy-outline.js";
 import {
   DEFAULT_ENV,
   TIME_PRESETS,
   WEATHER_PRESETS,
+  weatherAllowedForMap,
+  lockedWeatherForMap,
 } from "../core/environment-presets.js";
 
 async function startGame() {
@@ -236,6 +239,8 @@ async function startGame() {
   await initializeSystem("environment", "environment", () =>
     createEnvironment(context),
   );
+  // 风雪粒子层：只读 environment 的 snowLevel / wind，晴天时自动隐藏。
+  await initializeSystem("snow", "snow", () => createSnow(context));
   // 敌人红色轮廓（inverted hull）：依赖 enemies.list 与 context.camera，
   // 失败不阻断游戏。
   try {
@@ -243,15 +248,26 @@ async function startGame() {
   } catch (e) {
     console.error("[outline] init failed", e);
   }
+  // 地图 × 天气白名单：TIDEGATE 只有风雪，其它天气参数在这里就被吃掉。
+  let mapId = params.map === "tidegate" ? "tidegate" : "level",
+    lockedWeather = lockedWeatherForMap(mapId);
   if (params.time || params.weather) {
     let timeValid = params.time && TIME_PRESETS[params.time],
-      weatherValid = params.weather && WEATHER_PRESETS[params.weather];
-    if (timeValid || weatherValid) {
+      weatherValid =
+        params.weather &&
+        WEATHER_PRESETS[params.weather] &&
+        weatherAllowedForMap(mapId, params.weather);
+    if (lockedWeather && params.weather && params.weather !== lockedWeather) {
+      console.info(
+        "[boot] " + mapId + " 只接受 " + lockedWeather + "，已忽略 weather=" + params.weather,
+      );
+    }
+    if (timeValid || weatherValid || lockedWeather) {
       // 显式参数即使等于默认也 force 应用，避免“指定了晴天却还是湿的”歧义
       context.environment.set(
         {
           timeOfDay: timeValid ? params.time : undefined,
-          weather: weatherValid ? params.weather : undefined,
+          weather: weatherValid ? params.weather : lockedWeather || undefined,
         },
         true,
       );
@@ -261,7 +277,18 @@ async function startGame() {
   } else if (params.shot || params.bench) {
     // 幂等：environment 构造时已是 DEFAULT_ENV，set 不触发 applyStatic，
     // wetApplied 保持 false，mats.uniforms.wet 保持 1，截图与原版一致。
-    context.environment.set(DEFAULT_ENV);
+    // 被锁的图不存在“默认天气”，直接套锁定档（TIDEGATE 的构图就是按雪天验收的）。
+    context.environment.set(lockedWeather ? { weather: lockedWeather } : DEFAULT_ENV);
+  } else if (lockedWeather) {
+    // 只锁天气、时段仍随机：同一张图的时段差（22m / 26m / 19m / 11m）是玩法本体。
+    let times = Object.keys(TIME_PRESETS);
+    context.environment.set(
+      {
+        timeOfDay: times[Math.floor(context.rng() * times.length)],
+        weather: lockedWeather,
+      },
+      true,
+    );
   } else {
     context.environment.randomize();
   }
@@ -346,6 +373,7 @@ async function startGame() {
           console.error("[loop] game.update threw: " + ((v && v.stack) || v)));
       }
       updateSystem("environment", p);
+      updateSystem("snow", p);
       if (showcaseName) {
         if (context.showcaseInfo.update)
           try {

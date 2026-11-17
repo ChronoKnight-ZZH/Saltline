@@ -10,6 +10,7 @@ import {
 const EXPECTED_ENV_MODULES = [
   "src/core/environment.js",
   "src/core/environment-presets.js",
+  "src/effects/snow.js",
   "src/world/helicopter.js",
   "src/effects/lightning.js",
   "src/effects/solarflare.js",
@@ -32,6 +33,7 @@ const EXPECTED_EXPORTS = {
   "src/render/sky.js": ["applySkyPreset"],
   "src/world/helicopter.js": ["createHelicopter"],
   "src/effects/lightning.js": ["createLightning"],
+  "src/effects/snow.js": ["createSnow"],
   "src/effects/solarflare.js": ["createSolarFlare"],
 };
 
@@ -41,6 +43,7 @@ const EXPECTED_IMPORTS = {
     "createEnvironment",
     "createHelicopter",
     "createLightning",
+    "createSnow",
     "createSolarFlare",
     "DEFAULT_ENV",
     "TIME_PRESETS",

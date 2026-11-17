@@ -66,6 +66,48 @@ var LANES = {
 
 var LANE_ORDER = ["recon", "assault", "stealth", "balanced"];
 
+// ---- TIDEGATE 的插入配置：天气锁死为暴风雪，只让玩家选时段 ----
+// 「取消第二张图的其它天气」在这里落地：白毛风图的四张卡全部是 blizzard，
+// 时段差（22m / 26m / 19m / 11m）才是这图真正的难度选择。
+// 数值按 combine(时段, blizzard) 的能见度换算：dawn 180×0.12=21.6、noon 220×0.12=26.4、
+// dusk 160×0.12=19.2、midnight 90×0.12=10.8。
+var WHITEOUT_LANES = {
+  whiteoutDawn: {
+    label: "Whiteout \xB7 Dawn",
+    tagline: "Blizzard \xB7 sight ~22 m",
+    cells: [["dawn", "blizzard"]],
+    tip: "First light through snow. Twenty metres of sight. The boat's lamp is your only long reference.",
+  },
+  whiteoutNoon: {
+    label: "Whiteout \xB7 Noon",
+    tagline: "Blizzard \xB7 sight ~26 m",
+    cells: [["noon", "blizzard"]],
+    tip: "Flat light and no shadows. Read the ground, not the sky.",
+  },
+  whiteoutDusk: {
+    label: "Whiteout \xB7 Dusk",
+    tagline: "Blizzard \xB7 sight ~19 m",
+    cells: [["dusk", "blizzard"]],
+    tip: "Warm light scattering in snow haze. Pretty, and useless for spotting.",
+  },
+  whiteoutMidnight: {
+    label: "Whiteout \xB7 Midnight",
+    tagline: "Blizzard \xB7 sight ~11 m",
+    cells: [["midnight", "blizzard"]],
+    tip: "Eleven metres. Blind walking, deaf enemies. Thundersnow is your only glimpse of the far field.",
+  },
+};
+
+var WHITEOUT_ORDER = [
+  "whiteoutDawn",
+  "whiteoutNoon",
+  "whiteoutDusk",
+  "whiteoutMidnight",
+];
+
+// 查询表：简报文案 / 反推 lane / 抽格都用它，避免两套 lane 各自特判。
+var ALL_LANES = Object.assign({}, LANES, WHITEOUT_LANES);
+
 // ---- 地图选择：一个关卡一张卡 ----
 // 卡片只放“选之前必须知道”的东西：是哪块地、怎么结束、新不新。
 // 缩略图是纯 SVG 的平面示意（不引外部图片，单文件构建里也不多一个请求）。
@@ -81,9 +123,9 @@ var MAPS = [
   {
     id: "tidegate",
     name: "Tidegate",
-    tagline: "Cold-store quay \xB7 raised catwalk \xB7 boat at the north pier",
+    tagline: "Cold-store quay \xB7 blizzard only \xB7 boat at the north pier",
     badge: "New",
-    brief: "Long waterfront sightlines. Climb the catwalk for the last uplink.",
+    brief: "Snow-blind by design: 11–26 m of sight, no rain, no clear skies. Climb the catwalk for the last uplink.",
   },
 ];
 
@@ -141,6 +183,8 @@ var WEATHER_TEXT = {
   overcast: "Overcast.",
   lightRain: "Light rain.",
   heavyRain: "Heavy rain.",
+  lightSnow: "Light snow.",
+  blizzard: "Blizzard.",
 };
 
 var TIME_LABEL = {
@@ -155,10 +199,12 @@ var WEATHER_LABEL = {
   overcast: "Overcast",
   lightRain: "Light rain",
   heavyRain: "Heavy rain",
+  lightSnow: "Light snow",
+  blizzard: "Blizzard",
 };
 
 function briefText(timeOfDay, weather, laneKey) {
-  let lane = LANES[laneKey];
+  let lane = ALL_LANES[laneKey];
   if (!lane) return "";
   return (
     TIME_TEXT[timeOfDay] + " " + WEATHER_TEXT[weather] + " " + lane.tip
@@ -166,7 +212,7 @@ function briefText(timeOfDay, weather, laneKey) {
 }
 
 function profileText(timeOfDay, weather, laneKey) {
-  let lane = LANES[laneKey],
+  let lane = ALL_LANES[laneKey],
     laneLabel = lane ? lane.label : "Custom";
   return (
     "Mission profile: " +
@@ -178,10 +224,20 @@ function profileText(timeOfDay, weather, laneKey) {
   );
 }
 
+// 雪档 → 对应的白毛风卡（雪档只在 TIDEGATE 存在；旧图拿到雪天也能反推出一个可读的名字）。
+var WHITEOUT_BY_TIME = {
+  dawn: "whiteoutDawn",
+  noon: "whiteoutNoon",
+  dusk: "whiteoutDusk",
+  midnight: "whiteoutMidnight",
+};
+
 // 由时间/天气反推 lane（URL 直接开局、?shot / ?autostart 没有简报屏幕时用）。
-// 优先级与 LANES 分组一致：heavyRain → assault；夜晴/夜阴 → stealth；
+// 优先级与 LANES 分组一致：雪 → whiteout；heavyRain → assault；夜晴/夜阴 → stealth；
 // 白天晴/阴 → recon；其余（含 dusk 全部与 lightRain）→ balanced。
 function inferLane(timeOfDay, weather) {
+  if (weather === "blizzard" || weather === "lightSnow")
+    return WHITEOUT_BY_TIME[timeOfDay] || "whiteoutMidnight";
   if (weather === "heavyRain") return "assault";
   if (
     timeOfDay === "midnight" &&
@@ -198,6 +254,8 @@ function inferLane(timeOfDay, weather) {
 
 // 纯 CSS 卡片动画的标记（无脚本、无 GPU 开销，reduced-motion 时全部静止）。
 function laneAnimMarkup(key) {
+  if (key.indexOf("whiteout") === 0)
+    return '<i class="la-flake f1"></i><i class="la-flake f2"></i><i class="la-flake f3"></i><i class="la-flake f4"></i>';
   if (key === "recon")
     return '<i class="la-sun"></i><i class="la-enemy e1"></i><i class="la-enemy e2"></i>';
   if (key === "assault")
@@ -342,7 +400,10 @@ var TOUCH_CONTROLS_HTML = `
 function createMenus(context, e) {
   let t = document.getElementById("ui"),
     n = loadSettings(),
-    s = document.createElement("div");
+    s = document.createElement("div"),
+    // TIDEGATE 只给风雪卡：牌面从 LANE_ORDER 换成 WHITEOUT_ORDER。
+    whiteoutMap = !!(context.params && context.params.map === "tidegate"),
+    laneOrder = whiteoutMap ? WHITEOUT_ORDER : LANE_ORDER;
   ((s.className = "menu"),
     (s.dataset.screen = "none"),
     (s.innerHTML = `
@@ -431,11 +492,11 @@ function createMenus(context, e) {
         <h2 class="mb-h">Choose your insertion</h2>
       </div>
       <div class="mb-grid">
-        ${LANE_ORDER.map((key) => {
-          let l = LANES[key];
+        ${laneOrder.map((key) => {
+          let l = ALL_LANES[key];
           return `
           <button class="lane-btn" data-lane="${key}" aria-pressed="false">
-            <div class="lane-anim lane-${key}" aria-hidden="true">${laneAnimMarkup(key)}</div>
+            <div class="lane-anim lane-${key.indexOf("whiteout") === 0 ? "whiteout" : key}" aria-hidden="true">${laneAnimMarkup(key)}</div>
             <b>${l.label}</b>
             <span>${l.tagline}</span>
           </button>`;
@@ -643,7 +704,7 @@ function createMenus(context, e) {
   }
 
   function pickCell(laneKey) {
-    let cells = LANES[laneKey].cells;
+    let cells = ALL_LANES[laneKey].cells;
     return cells[Math.floor(Math.random() * cells.length)];
   }
 
@@ -670,7 +731,7 @@ function createMenus(context, e) {
   }
 
   function selectLane(laneKey) {
-    if (!LANES[laneKey]) return;
+    if (!ALL_LANES[laneKey]) return;
     ((briefing.lane = laneKey),
       (briefing.cell = pickCell(laneKey)),
       syncLaneButtons(),

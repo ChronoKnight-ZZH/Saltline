@@ -9,6 +9,8 @@ import { createRandom } from "../core/random.js";
 var SCHEDULE = {
   lightRain: LIGHTNING_TIMING.lightRainInterval,
   heavyRain: LIGHTNING_TIMING.heavyRainInterval,
+  // 雷雪：雪幕中低频放电，60–120s 一次（设计稿 1.5 E 项）。
+  blizzard: LIGHTNING_TIMING.blizzardInterval,
 };
 
 // dusk.lampOn = 0.7 也判为“夜晚”：黄昏在雷雨里天色已暗，全屏 flash 合理。

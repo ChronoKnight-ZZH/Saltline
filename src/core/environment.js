@@ -9,6 +9,8 @@ import {
   LIGHTNING_TIMING,
   LIGHTNING_PEAK_CAP,
   SOLAR_FLARE_TUNING,
+  weatherAllowedForMap,
+  lockedWeatherForMap,
   combine,
 } from "./environment-presets.js";
 
@@ -17,12 +19,20 @@ function createEnvironment(context) {
       context.params && context.params.seed ? context.params.seed : 4207,
     ),
     rng = createRandom((seed ^ 0x9e3779b9) >>> 0),
+    // TIDEGATE 这类「天气被锁」的图：启动即用锁定天气，避免标题页先闪一帧晴天。
+    mapId = (context.params && context.params.map) || "level",
+    lockedWeather = lockedWeatherForMap(mapId),
     state = {
       timeOfDay: DEFAULT_ENV.timeOfDay,
-      weather: DEFAULT_ENV.weather,
-      target: combine(DEFAULT_ENV.timeOfDay, DEFAULT_ENV.weather),
+      weather: lockedWeather || DEFAULT_ENV.weather,
+      target: combine(
+        DEFAULT_ENV.timeOfDay,
+        lockedWeather || DEFAULT_ENV.weather,
+      ),
       current: null,
     },
+    // 风：第三个维度。方向缓慢旋转，速度由 windLevel 推出（m/s）。
+    wind = { x: 0, z: 0, speed: 0, level: 0, angle: 0.7 },
     visibility = {
       base: state.target.visibility,
       current: state.target.visibility,
@@ -44,6 +54,9 @@ function createEnvironment(context) {
       wetness: target.wetness,
       audioMask: target.audioMask,
       spreadScale: target.spreadScale,
+      // 雪档：粒子密度与风力都按 target 起步，避免刷新瞬间从 0 涨上来。
+      snowLevel: target.snowLevel,
+      windLevel: target.windLevel,
     };
   }
 
@@ -194,6 +207,16 @@ function createEnvironment(context) {
     }
   }
 
+  // 风向量：方向缓慢旋转（雪天更慢、更像一整块风墙），速度由风级推出（m/s）。
+  function updateWind(dt) {
+    let level = state.current.windLevel || 0;
+    wind.level = level;
+    wind.angle += dt * (0.015 + 0.02 * level);
+    wind.speed = 0.8 + 4.2 * level;
+    wind.x = Math.cos(wind.angle) * wind.speed;
+    wind.z = Math.sin(wind.angle) * wind.speed;
+  }
+
   function pushFrame(dt) {
     let c = state.current,
       t = state.target;
@@ -205,6 +228,9 @@ function createEnvironment(context) {
     }
     c.audioMask = damp(c.audioMask, t.audioMask, 4, dt);
     c.spreadScale = damp(c.spreadScale, t.spreadScale, 4, dt);
+    c.snowLevel = damp(c.snowLevel, t.snowLevel || 0, 3, dt);
+    c.windLevel = damp(c.windLevel, t.windLevel || 0, 3, dt);
+    updateWind(dt);
     // §6：雷声遮蔽窗口倒计时
     if (thunderMaskT > 0) {
       thunderMaskT -= dt;
@@ -267,6 +293,12 @@ function createEnvironment(context) {
 
   function setWeather(name) {
     if (!WEATHER_PRESETS[name] || name === state.weather) return;
+    // 被锁的图（TIDEGATE）拒绝其它天气：非法请求直接落到锁定档，不静默变雨。
+    if (!weatherAllowedForMap(mapId, name)) {
+      if (!lockedWeather) return;
+      name = lockedWeather;
+    }
+    if (name === state.weather) return;
     applyTarget(state.timeOfDay, name);
     applyStatic(true);
     emitChanged();
@@ -283,6 +315,9 @@ function createEnvironment(context) {
         opts.weather && WEATHER_PRESETS[opts.weather]
           ? opts.weather
           : state.weather;
+    if (!weatherAllowedForMap(mapId, nextWeather)) {
+      nextWeather = lockedWeather || nextWeather;
+    }
     if (nextTime === state.timeOfDay && nextWeather === state.weather) {
       if (force) applyStatic(true);
       return;
@@ -294,7 +329,10 @@ function createEnvironment(context) {
 
   function randomize() {
     let times = Object.keys(TIME_PRESETS),
-      weathers = Object.keys(WEATHER_PRESETS);
+      weathers = Object.keys(WEATHER_PRESETS).filter((w) =>
+        weatherAllowedForMap(mapId, w),
+      );
+    if (!weathers.length) weathers = [state.weather];
     set(
       {
         timeOfDay: rng.pick(times),
@@ -379,6 +417,16 @@ function createEnvironment(context) {
     get wetness() {
       return state.current.wetness;
     },
+    // 雪档：粒子密度（0..1）与风级（0..3），表现层与音频共用。
+    get snowLevel() {
+      return state.current.snowLevel;
+    },
+    get windLevel() {
+      return state.current.windLevel;
+    },
+    get wind() {
+      return wind;
+    },
     // M4：当前灯光强度（0..1）。lightning 用 >0.5 判定“夜晚”决定是否全屏 flash。
     get lampOn() {
       return state.target.lampOn;
@@ -430,7 +478,7 @@ defineModuleExports(environmentShowcaseModule, {
 
 function showcaseEnvironment(context) {
   let times = ["dawn", "noon", "dusk", "midnight"],
-    weathers = ["clear", "overcast", "lightRain", "heavyRain"],
+    weathers = ["clear", "overcast", "lightRain", "heavyRain", "lightSnow", "blizzard"],
     ti = 0,
     wi = 0,
     tAcc = 0,

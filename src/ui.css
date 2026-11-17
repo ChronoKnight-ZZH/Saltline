@@ -1793,6 +1793,61 @@ kbd {
   }
 }
 
+/* whiteout：横向雪幕。暴风雪里雪是被风"吹成墙"的，不是雨丝那样直落。 */
+.lane-whiteout {
+  position: relative;
+  background: linear-gradient(180deg, #6f7f8d 0%, #c3d2dd 55%, #e9eff4 100%);
+  overflow: hidden;
+}
+/* 边缘泛白的雪盲感：中心留一点对比度，四周全部吃掉 */
+.lane-whiteout::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    110% 85% at 50% 55%,
+    rgba(255, 255, 255, 0) 35%,
+    rgba(255, 255, 255, 0.6) 100%
+  );
+  pointer-events: none;
+}
+.lane-whiteout .la-flake {
+  position: absolute;
+  left: -40%;
+  height: 2px;
+  width: 30%;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.85);
+  filter: blur(0.4px);
+  animation: lane-flurry 1.8s linear infinite;
+}
+.lane-whiteout .la-flake.f1 {
+  top: 18%;
+}
+.lane-whiteout .la-flake.f2 {
+  top: 38%;
+  animation-delay: -0.5s;
+  width: 22%;
+}
+.lane-whiteout .la-flake.f3 {
+  top: 60%;
+  animation-delay: -1s;
+  width: 34%;
+}
+.lane-whiteout .la-flake.f4 {
+  top: 78%;
+  animation-delay: -1.4s;
+  width: 18%;
+}
+@keyframes lane-flurry {
+  from {
+    left: -40%;
+  }
+  to {
+    left: 115%;
+  }
+}
+
 .mb-brief {
   min-height: 3em;
   max-width: min(760px, 100%);
