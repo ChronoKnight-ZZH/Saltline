@@ -123,31 +123,44 @@ var MAPS = [
   {
     id: "tidegate",
     name: "Tidegate",
-    tagline: "Cold-store quay \xB7 blizzard only \xB7 boat at the north pier",
+    tagline: "Blizzard only \xB7 frozen harbour \xB7 half-buried depot \xB7 icebreaker",
     badge: "New",
-    brief: "Snow-blind by design: 11–26 m of sight, no rain, no clear skies. Climb the catwalk for the last uplink.",
+    brief:
+      "Four zones on one sheet of ice: a cracking lead to the west, the buried depot east, the cable tower on the north hill, and an icebreaker taking survivors off the south field. Sight 11–26 m.",
   },
 ];
 
 // 平面示意：一堆矩形拼出的关卡轮廓，颜色只用地板灰 + 信号橙。
 function mapThumbMarkup(id) {
   if (id === "tidegate") {
+    // 西冰面 / 东货仓 / 北缆车塔 / 南破冰船 + 跨冰缝的栈桥
     return `<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
       <rect x="0" y="0" width="160" height="90" fill="#14181b"/>
-      <rect x="0" y="64" width="160" height="26" fill="#1d2a31"/>
-      <rect x="6" y="26" width="26" height="32" fill="#2a3137" stroke="#4a535a"/>
-      <rect x="36" y="20" width="34" height="44" fill="#242b30" stroke="#3d464d"/>
-      <rect x="38" y="22" width="7" height="7" fill="#323a40"/>
-      <rect x="49" y="22" width="7" height="7" fill="#323a40"/>
-      <rect x="38" y="34" width="7" height="7" fill="#323a40"/>
-      <rect x="60" y="30" width="8" height="8" fill="#323a40"/>
-      <rect x="76" y="14" width="22" height="50" fill="#20272c" stroke="#ffb347" stroke-width="1.4"/>
-      <rect x="80" y="18" width="14" height="10" fill="#2c353b"/>
-      <line x1="78" y1="46" x2="96" y2="55" stroke="#4a535a"/>
-      <rect x="104" y="26" width="30" height="34" fill="#243036" stroke="#4a535a"/>
-      <rect x="134" y="22" width="18" height="46" fill="#20282e" stroke="#4a535a"/>
-      <line x1="98" y1="40" x2="140" y2="40" stroke="#ffb347" stroke-width="2"/>
-      <circle cx="140" cy="40" r="2.6" fill="#ffb347"/>
+      <rect x="0" y="0" width="56" height="90" fill="#1c2b33"/>
+      <rect x="4" y="6" width="44" height="74" fill="#233540" stroke="#3d5a66"/>
+      <line x1="12" y1="18" x2="30" y2="20" stroke="#41606d"/>
+      <line x1="14" y1="52" x2="34" y2="50" stroke="#41606d"/>
+      <rect x="56" y="0" width="9" height="90" fill="#101a1f" stroke="#32505c"/>
+      <rect x="55" y="56" width="11" height="7" fill="#3a4a52" stroke="#6b7f88"/>
+      <rect x="65" y="14" width="86" height="52" fill="#242b30" stroke="#4a535a"/>
+      <rect x="68" y="17" width="12" height="9" fill="#323a40"/>
+      <rect x="82" y="17" width="12" height="9" fill="#323a40"/>
+      <rect x="96" y="17" width="12" height="9" fill="#323a40"/>
+      <rect x="110" y="17" width="12" height="9" fill="#323a40"/>
+      <rect x="68" y="30" width="12" height="9" fill="#323a40"/>
+      <rect x="82" y="30" width="12" height="9" fill="#323a40"/>
+      <rect x="100" y="30" width="18" height="12" fill="#1a2126" stroke="#ffb347"/>
+      <rect x="136" y="26" width="12" height="18" fill="#2a3238" stroke="#4a535a"/>
+      <rect x="60" y="0" width="60" height="14" fill="#2a3339" stroke="#4a535a"/>
+      <rect x="86" y="2" width="7" height="10" fill="#20272c" stroke="#ffb347" stroke-width="1.2"/>
+      <line x1="84" y1="12" x2="70" y2="26" stroke="#4a535a"/>
+      <path d="M46 88 L46 76 Q84 70 124 76 L124 88 Z" fill="#20282e" stroke="#4a535a"/>
+      <rect x="58" y="76" width="30" height="12" fill="#2a3238" stroke="#4a535a"/>
+      <line x1="70" y1="70" x2="70" y2="76" stroke="#4a535a"/>
+      <circle cx="30" cy="26" r="2.6" fill="#ffb347"/>
+      <circle cx="109" cy="36" r="2.6" fill="#ffb347"/>
+      <circle cx="89" cy="6" r="2.6" fill="#ffb347"/>
+      <circle cx="86" cy="82" r="2.6" fill="#ffb347"/>
     </svg>`;
   }
   return `<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">

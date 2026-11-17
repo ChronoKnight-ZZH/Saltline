@@ -102,6 +102,10 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 
 ## 第二部分 · 新地图设计要素（TIDEGATE · 冷链东堤）
 
+> **版本提示（2026-11-17）**：下面 2.1–2.8、2.12 的布局描述是 **v1 提案**（闸口/堆场/冷库/码头线性走廊），已被**四区方案 v2** 整体替换。
+> 现行实现以 `src/world/level/tidegate.js` 为准，权威说明见本部分末尾的 **2.13 现行四区布局（v2，代码为准）**。
+> 2.9（天气锁定与可读性）、2.10（道具白名单）、2.11（性能预算）仍然有效。
+
 ### 2.1 设计意图（为什么不是“换个贴图”）
 
 现有地图是**一条东西向线性走廊**：闸口 → 堆场 → 仓库 → 码头，玩家的推进方向即视线方向，远距离交火少、绕后机会少。
@@ -227,6 +231,84 @@ player/enemies/combat   通过 moveCapsule / nav.findPath / raycast 消费上面
 5. 完整跑通：三中继 → `objective:all` → 撤离 `extraction:reached` → 结算评级。
 6. 控制台无 `[props] unknown prop`、无 `[level] label atlas failed`、无 `[level] prop update threw`。
 7. `?bench=1` 下 avg 帧率不低于现图 -10%。
+
+---
+
+### 2.13 现行四区布局（v2，代码为准）
+
+四区替代了 v1 的“闸口→堆场→冷库→码头”线性走廊。**唯一硬约束是“和地图一（Saltline 港口）有明显区别、不重复元素”**，其余为自主创作。
+
+| 区 | 代码常量（`tidegate.js` 顶部 `L`） | 内容 | 目标 |
+| --- | --- | --- | --- |
+| 冰面码头（西） | `ice{x[-40,-13], z[-12,30], y 0.06}` | 冻结海面 + 6 条冰纹 + 7 条挤压冰脊 + 冰钓小屋 ×3 + 半沉集装箱 ×3 + 冰洞 ×2 | **A** 冰面信标（`ice_beacon_a`，桅顶灯重启） |
+| 冰缝（西↔东的连接障碍） | `lead{x[-13,-7], z[-12,30]}` | 未冻深水（surface `water_dark`）+ 两侧冰沿 + 断口碎冰 + 红色警示带 | 掉下去 = 扣 12 血 + 传回最近安全点（复用 `player:rescued` 语义） |
+| 货仓区（东） | `depot{x[-7,26], z[-12,16]}`，仓库壳体 `shed{x 8..26, z -6..12, wall 0.34, h 5.4}` | 半埋仓库（北墙外 1.9 m 雪垄、西墙北段、南墙西段三面埋）+ 供暖站 + 东侧叠箱 3 组 + 叉车残骸 + 分散散料 | **B** 供暖站（`heat_plant_b`，锅炉/烟囱/控制台） |
+| 缆车塔（北） | `hill{x[-16,12], z[-30,-12], h 2.6}` + `slope{x[1,8], z[-12,-4.2], 9 级}` + `tower{x 7, z -24, deck 5.2, top 12.6}` | 2.6 m 台地（南面断崖+雪檐）、9 级雪坡（坡上 5 处雪堆掩体）、四腿格构塔、5.2 m 瞭望台 + 值班小屋、12.6 m 塔顶红灯、缆索 + 吊舱 | **C** 信号台（`signal_post_c`，在瞭望台上） |
+| 破冰船（南） | `ship{x[-6,10], z[20.4,31], deck 3.04, bow 2.66}`，撤离点 `extraction{x 2, z 23.6, y 3.04, r 2.8}` | 改版 KITTIWAKE：艏段压碎的冰板带、三段船体 + 红水线、驾驶台、烟囱、桅杆、舷梯 | 撤离 |
+| 南侧开阔地 | `z > 16` | 8 根反光标杆（暴雪里唯一路标）+ 5 处低矮雪堆 + 4 处起伏 | 所有区 ↔ 破冰船 |
+
+**连接方式（与用户给定的一致）**
+
+1. 冰面码头 ↔ 货仓区：`bridge{x[-15,-5], z[2.2,6.6], y 0.42}` 雪覆栈桥跨过冰缝。桥面碰撞顶面 0.52 m，两端各加一级 0.32 m 桥头台阶（冰面 0.06 / 货仓地面 0 → 台阶 → 桥面，步高 0.26 / 0.20 / 0.20，都 `<` 步高 0.42）。桥南侧护栏在中段断开 4 m（`-12.1..-7.9`），从缺口掉进冰缝。
+2. 货仓区 ↔ 缆车塔：`slope` 9 级雪坡（z -4.2 → -12，每级 0.29 m，中间留 3 m 通道，两侧雪堆）；另一条路是 x≈11.4 的铁楼梯（`stairs_metal`，升 2.6）→ 2.6 m 走台 → 台地。
+3. 台地 → 5.2 m 瞭望台：x≈6.2、z≈-20.1 的第二段 `stairs_metal`，从台地（2.66）升到 5.26，顶台正对 deck 南缘（护栏在南侧 `x 5.2..7.2` 留口）。**这是 v1 遗留缺陷“瞭望台无上法、目标 C 不可达”的修复。**
+4. 所有区 ↔ 破冰船：南侧开阔地直走（雪堆当掩体、反光杆当路标）；船艏舷梯 `stairs_metal` 底在 z 17.4、顶台收在艏段前沿 z 20.4（不再插进船壳）。
+
+**与地图一的差异点（逐项可指认）**
+
+- 地图一是**混凝土码头 + 露天堆场 + 东西线性走廊**；本图是**冰面 / 冰缝 / 台地 / 破冰船**四块独立地形，靠栈桥+雪坡+楼梯+开阔地串成环。
+- 地图一的垂直层是箱顶（2.59）与 4.8 m 栈桥；本图是**2.6 m 台地 + 5.2 m 瞭望台 + 3.04 m 船甲板**。
+- 地图一撤离点是西侧码头的救生艇；本图是**南侧破冰船主甲板**。
+- 元素上刻意避开：地图一的龙门吊、系缆桩阵列、护栏长墙、双排箱矩阵、冷库卷帘门，本图一个都没有；本图的冰钓小屋、半埋仓库、缆车塔、破冰船、冰裂缝在地图一均不存在。
+
+**本段修掉的 24 类缺陷（全部已落码）**
+
+| # | 缺陷 | 修法 |
+| --- | --- | --- |
+| 1 | 7 个非法 prop 名退回 1 m 灰盒（`barrel_steel`/`barrel_blue`/`barrel_rust`/`crate_plastic`/`plastic_crate_blue`/`fire_extinguisher`/`handcart`） | 全部换成已注册名（`barrel` + 合法色名 / `crate_stack` / `ibc_tote` / `pallet_stack` / `toolbox_cart`），灭火器改为 `cyl` + `col` 现搭 |
+| 2 | `buildMaterials` 缺 `concreteDirty` 键（`m.concrete_dirty \|\| m.concrete` 是死分支）；`m.rope` 未定义 | 补 `concreteDirty: "concrete_dirty"` 与 `rope: "rope"` |
+| 3 | 静态合批丢弃返回值 → `noMerge`/多材质件被 reparent 后不进场景（画面缺件） | 改为 `var merged = batchStaticMeshes(t.staticRoot); levelRoot.add(merged); levelRoot.add(t.dynRoot)`，**不再** `add(t.staticRoot)`（否则可合并件画两遍） |
+| 4 | `setLights` 语义错（`lampsOn` 是布尔、`lampOn` 才是 0..1 档位） | 按 `level.js` 重写：`k=clamp(0,1,intensity)`、`lit = on && k>0.05`、`intensity = lit ? base*k : 0` |
+| 5 | 设备 updater 读 `userData.lamp` 却从没写入 → 三台设备的灯永不呼吸/闪/转绿 | `wireDevice` 里补 `g.userData.lamp = lamp`；updater 直接遍历 `devices` |
+| 6 | `contextEmissive` 读 `t.mats`（`ob()` 上没有这个键）→ 永远走 MeshBasic 回落 | 改为接收 `context`，走 `context.mats.emissive(color, mult)`，`buildWarehouse/buildHeatingPlant` 透传 |
+| 7 | `cinematicPath` 用 `Vector3`（`flow` 里 `new Vector3(...Y.pos)` 展开会抛 TypeError） | 改纯数组 `{pos:[x,y,z], look:[x,y,z]}`，去掉 `fov` |
+| 8 | `zones` / `vantage` / `stats` / `placed` 形状与 `level.js` 不符 | `zones` → `{name,min:[x,z],max:[x,z]}`；`vantage` → `{stairsFoot, roof}`；`stats` → 对象；`placed` → `t.placed` |
+| 9 | 目标 id 末字符是 n/t/t → HUD 短号显示 N/T/T | 改 `ice_beacon_a` / `heat_plant_b` / `signal_post_c`（`flow` 取 id 末位字母数字） |
+| 10 | `updateHazards` 用 `p.hp` 判死亡（player 上无此字段，恒为假） | 改 `p.alive === false \|\| p.health <= 0` |
+| 11 | 冰缝上盖了整片白色薄片，把深水断口视觉抹平 | 删掉该薄片，只留深水 + 冰沿 + 碎冰 + 警示带 |
+| 12 | 栈桥顶面 0.52 与两端地面高差 0.46/0.52 > 步高 0.42，两端都上不去 | 两端各加 0.32 m 桥头台阶（含碰撞与雪面），三级步高都 < 0.42 |
+| 13 | 5.2 m 瞭望台无上法（目标 C 不可达） | 台地上加第二段 `stairs_metal`（见上文连接 3），并在南侧护栏留 2 m 口 |
+| 14 | 破冰船舷梯顶台插进艏段船壳 z[20.4,22] | 楼梯起点 z 20.4 → 18.9（顶台 `19.8..20.4`），扶手按真实梯宽 0.9（x 1.52/2.48）重算 |
+| 15 | 信标的三脚桅 / 横撑 / 走线 / 地脚板缺 `{parent:g}`，全部建到世界原点 | 全部补 parent |
+| 16 | 仓库屋顶一整块积雪盖住塌陷口（x[18,22] z[6,10]） | 按四块屋面板分铺雪，塌陷口留空露椽子；同时删掉共面的南墙 teal 色带（会 z-fighting） |
+| 17 | 三面墙脚雪垄堵死关键通路（西墙雪垄压住雪坡东缘、南墙雪垄封死南门） | 改为北墙外（x 8.5..25.5）、西墙北段（x 7..8.4 / z -3..1.8）、南墙西段（x 8.2..12.4）+ 东侧不埋，门洞与箱堆前留空 |
+| 18 | 吊舱不在缆索线上（吊杆顶端离缆 0.9 m 悬空） | 吊舱移到缆索 40% 处 `(13.8, 8.4, -12.0)`（该点缆高 ≈10.38），吊杆 `0.95..1.98` 顶到缆上 |
+| 19 | `pallet` 传 `tilt`（`place` 无此选项） | 去掉 `tilt`，`noCol` 放置后手动 `rotation.x = 0.32` |
+| 20 | container 传 hex 色（`jg` 只认 8 个色名，静默换色） | 6 处全改色名（teal/white/green/blue/orange/grey） |
+| 21 | `snowBerm` 里 `var c = Math.abs(Math.cos(0)) * h;` 死代码 | 删 |
+| 22 | 冰面打滑只有数据（`groundFriction` 全 src 无消费方） | 冰面 collider surface 标 `"ice"`，`player.js` 在 `q === "ice"` 时把地面加速/减速系数乘 0.55（map1 无 `"ice"` surface，不回归；音频对未知名回落 `step_concrete`） |
+| 23 | 出生点/掩体从未做导航自检（v1 文档里的 `auditNav()` 在重写时丢了） | 末尾补 `auditNav()`：逐点 `physics.nav.isWalkable`，失败 `console.warn` 打坐标清单 |
+| 24 | 艏甲板 2.66 → 主甲板 3.04 是一个 0.38 的单级落差（贴步高上限，脚感是一整级台阶） | 在 z 21.9..22.4 补一块 0.19 甲板压条（含 `col`），物理上拆成 0.19 + 0.19 两级 |
+
+**验证状态（本段首次做运行期验证）**
+
+一条命令跑全部三项：`npm run audit:tidegate`（静态审计 → 桩冒烟 → 动线爬行，任一失败即非零退出）。
+
+- `npm run check` 通过：78 modules / 环境契约 / 原包 SHA-256 `f7081ef7…f90` / 22 个字体。
+- `npm run build` 通过：`dist/index.html` 1520.99 kB，gzip 471.29 kB（vite v8.3.7，82 modules）。
+- **node 桩 context 冒烟**（`scripts/audit-tidegate-smoke.mjs`，用真 `createProps` + 桩 `mats/physics/events` 直接跑 `createTidegateLevel`）：`0 error / 0 warning`；164 个 collider、45 个出生点（地面 30 / 空中 15）、34 个掩体点、52 件摆放、`tris 140368`、`meshes 41`、9 个 container；36 个材质名全部命中 `catalog.l1`（0 个未知名）；返回契约自检（`cinematicPath` 纯数组 / `zones` min-max 二元组 / `vantage` 是 Vector3 / `stats` 是对象 / 三目标都带 `zone+pos`）全 ok。
+- **静态审计**（`scripts/audit-tidegate-static.mjs`）：`t.place` 的 16 个 prop 名全在注册表内、`t.place` 里没有 hex 颜色与 `tilt`、没有 `fov:`/`p.hp`/`t.mats` 残留。
+- **AABB 步高爬行**（`scripts/audit-tidegate-routes.mjs`，步高 0.42、每 0.12 m 采样、按"最高可达面"逐步抬脚）6 条动线全部 ok：
+  - 冰面 → 栈桥 → 货仓区：0 → 0.52，最大上抬 0.26（桥头台阶 x -15.97）
+  - 货仓区 → 9 级雪坡 → 台地：0 → 2.66，最大 0.29
+  - 货仓区 → 铁楼梯 → 走台 → 台地：0 → 2.66，最大 0.32
+  - 台地 → 第二段楼梯 → 5.2 m 瞭望台：2.66 → 5.26，最大 0.20（楼梯首级 z -18.60）
+  - 南侧开阔地 → 舷梯 → 艏甲板 → 主甲板：0 → 3.04，最大 0.38（已由缺陷 24 拆成两级 0.19）
+  - 出生点 → 冰缝西侧安全点：0.06 → 0.06
+  - 6 条动线接缝采样数均为 0（相邻 collider 之间没有真空隙）。
+- 冒烟脚本踩过的两个桩问题（复跑时别踩）：① 缺 `context.props` → 必须 `import "../src/world/props/register.js"` 触发副作用注册；② `mats.decal/label` 必须返回 `{material, aspect}`，返回裸 `Material` 会让 `detail-geometry` 的 `decal/label/cdecal` 抛 `reading 'uuid'`。
+- 另：`physics.addBox` 的 min/max 既可能是数组（`t.col`）也可能是 `Box3` 的 `Vector3`（`place` 的 collider 路径），写校验脚本时必须先归一化，否则会把整批楼梯 collider 误判成"缺失"。
+- **仍未做**：浏览器实机跑图与截图（该工程自动化页面为 hidden、CDP 输入被拒，见 4.4/4.6），所以画面观感、暴雪可见性、三目标交互、掉冰缝救援、`setLights` 灯光变化、`auditNav()` 的实际警告输出仍未被人眼确认。
 
 ---
 

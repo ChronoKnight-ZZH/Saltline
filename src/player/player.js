@@ -300,13 +300,15 @@ function createPlayer(context) {
     let V = Math.sin(C.yaw),
       Y = Math.cos(C.yaw);
     U.set(ue * Y - me * V, 0, -ue * V - me * Y).multiplyScalar(P);
-    let L = C.onGround
-        ? ee
-          ? PLAYER_MOVEMENT.accelGround
-          : PLAYER_MOVEMENT.decelGround
-        : ee
-          ? PLAYER_MOVEMENT.accelAir
-          : 0.6,
+    let L =
+        (q === "ice" ? 0.55 : 1) *
+        (C.onGround
+          ? ee
+            ? PLAYER_MOVEMENT.accelGround
+            : PLAYER_MOVEMENT.decelGround
+          : ee
+            ? PLAYER_MOVEMENT.accelAir
+            : 0.6),
       Z = U.x - C.vel.x,
       J = U.z - C.vel.z;
     !C.onGround && !ee && ((Z = -C.vel.x), (J = -C.vel.z));
