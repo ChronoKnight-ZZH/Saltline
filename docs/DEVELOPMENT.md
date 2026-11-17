@@ -101,6 +101,14 @@ window.__G;        // 运行中的游戏上下文
 | `/?time=midnight&weather=heavyRain` | 固定时间/天气（M1 起）；**同时跳过简报屏幕** |
 | `/?time=dawn&weather=clear` | 显式默认组合，`force: true` 应用 |
 | `/?show=environment` | 时间/天气/直升机/闪电展示，每 6s/4s 自动切换（M5） |
+| `/?wx=off` | **解除本图天气锁**（TIDEGATE 也接受晴/雨/小雪；`?weather=off` 等价）。只作用于本次加载，不改菜单卡片与任何默认值；不给 `time`/`weather` 时落到 `DEFAULT_ENV`（晴/黎明） |
+| `/?snow=0` | **只关雪粒子层**（`effects/snow.js`），雾、压暗、风力、雷雪全部照旧——用来分辨"看不清"是雪幕还是白点造成的 |
+| `/?lightning=0` | 本次不创建闪电（含暴雪的 `thundersnow`），`environment` 检测不到 `context.lightning` 会自动跳过启停 |
+| `/?map=tidegate&wx=off&snow=0&lightning=0` | 一条命令回到"干净天空"做地形/几何验收 |
+
+> 注意：`screenFx.snowBlind` / `windShake`（暴雪预设里那两个字段）目前**没有任何消费方**，屏幕上不会真的出现雪盲遮罩或风摇，所以不需要额外开关。
+
+上面三个开关的判定逻辑在 `environment-presets.interpretWeatherParams`（纯函数，不在 runtime 内联），`?snow=0` 的静音行为在 `effects/snow.js`；两者都有自检：`npm run audit:weather`（11 个参数组合 + 4 个粒子状态断言，失败即非零退出）。开关只读 URL，不写存档、不改菜单卡片，刷新即恢复原状。
 
 无上述环境/自动化参数时，Deploy 会先进入简报屏幕（`menus.js` 的 `briefingEnabled`），必须选一条 lane 才能开局。
 

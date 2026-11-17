@@ -206,3 +206,14 @@ npm run build                 # vite 单文件 dist
 ```
 
 实机检查（`?map=tidegate&time=noon&shot=1`）：应看到横向雪幕、无雨幕、无湿地面反射、天空为雪雾色、`console` 无 weather 忽略提示（因为参数就是 blizzard）。`?map=tidegate&weather=heavyRain` 应打印「只接受 blizzard，已忽略 weather=heavyRain」并仍是雪。
+
+**调试用的"关天气"开关**（只读 URL，不改锁定档，刷新即恢复）：
+
+| URL | 效果 |
+| --- | --- |
+| `?map=tidegate&wx=off` | 解除天气锁，落到晴/黎明（`?weather=off` 等价）；可再叠 `&weather=clear`、`&time=noon` |
+| `?map=tidegate&snow=0` | 只关雪粒子，暴雪的雾/压暗/风力/雷雪照旧 |
+| `?map=tidegate&lightning=0` | 本次不建闪电（雷雪也一并消失） |
+| `?map=tidegate&wx=off&snow=0&lightning=0` | 一条命令回到干净天空，做地形/几何验收 |
+
+判定逻辑在 `environment-presets.interpretWeatherParams`，自检 `npm run audit:weather`（详见 `docs/DEVELOPMENT.md` 的「原版调试参数」表）。

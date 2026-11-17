@@ -294,6 +294,45 @@ function lockedWeatherForMap(mapId) {
   return allow && allow.length ? allow[0] : null;
 }
 
+// ---- URL 天气请求的解析（纯函数，可单测） ----
+// ?wx=off / ?weather=off|none|0 是"解除本图天气锁"的调试开关：
+// 解锁后可以显式给任意已注册天气；不给就落到 DEFAULT_ENV（晴/黎明）。
+function isOffToggle(value) {
+  return value === "off" || value === "none" || value === "0";
+}
+
+function interpretWeatherParams(mapId, params) {
+  let p = params || {},
+    lockedMap = lockedWeatherForMap(mapId),
+    wxOff = isOffToggle(p.wx) || isOffToggle(p.weather),
+    // weather=off/none 只是解锁简写，本身不是天气档，不能当天气名用
+    weatherParam = wxOff && !WEATHER_PRESETS[p.weather] ? "" : p.weather,
+    timeOfDay = p.time && TIME_PRESETS[p.time] ? p.time : null,
+    weather =
+      weatherParam &&
+      WEATHER_PRESETS[weatherParam] &&
+      (wxOff || weatherAllowedForMap(mapId, weatherParam))
+        ? weatherParam
+        : null,
+    lockedWeather = wxOff ? null : lockedMap,
+    // 被锁的图收到别的天气时忽略并提示（wx=off 下不再提示，因为已明确解锁）
+    ignored =
+      !wxOff && weatherParam && lockedMap && weatherParam !== lockedMap
+        ? weatherParam
+        : null;
+  return {
+    mapId,
+    wxOff,
+    unlocked: wxOff && !!lockedMap,
+    lockedWeather,
+    timeOfDay,
+    weather,
+    ignored,
+    // 有任何一个显式天气/时段参数（或解锁开关）就强制应用，不再随机
+    explicit: !!(p.time || weatherParam || wxOff),
+  };
+}
+
 function combine(timeOfDay, weather) {
   let time = TIME_PRESETS[timeOfDay] || TIME_PRESETS[DEFAULT_ENV.timeOfDay],
     w = WEATHER_PRESETS[weather] || WEATHER_PRESETS[DEFAULT_ENV.weather],
@@ -362,6 +401,7 @@ export {
   MAP_WEATHER_LOCK,
   weatherAllowedForMap,
   lockedWeatherForMap,
+  interpretWeatherParams,
   snowFogColor,
   fogDensityFor,
   combine,

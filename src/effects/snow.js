@@ -42,6 +42,12 @@ void main() {
 }`;
 
 function createSnow(context) {
+  // 调试开关 ?snow=0：只关粒子层，雾/压暗/风力/雷雪都照旧。
+  // 用来区分"看不清"到底是雪幕（雾）还是白点（粒子）造成的。
+  let muted =
+    !!context.params &&
+    (context.params.snow === "0" || context.params.snow === "off");
+  if (muted) console.info("[snow] snow=0/off：本次不显示雪粒子（天气档不变）");
   let count = SNOW_MAX,
     rng = context.rng && context.rng.fork ? context.rng.fork() : Math.random,
     positions = new Float32Array(count * 3),
@@ -103,7 +109,11 @@ function createSnow(context) {
     if (dt > 0.1) dt = 0.1;
     time += dt;
     let env = context.environment,
-      level = env && typeof env.snowLevel === "number" ? env.snowLevel : 0,
+      level = muted
+        ? 0
+        : env && typeof env.snowLevel === "number"
+          ? env.snowLevel
+          : 0,
       wind = (env && env.wind) || { x: 0, z: 0, speed: 0 },
       cam = (context.camera && context.camera.position) || { x: 0, y: 2, z: 0 };
 

@@ -37,9 +37,7 @@ import { createEnemyOutline } from "../render/enemy-outline.js";
 import {
   DEFAULT_ENV,
   TIME_PRESETS,
-  WEATHER_PRESETS,
-  weatherAllowedForMap,
-  lockedWeatherForMap,
+  interpretWeatherParams,
 } from "../core/environment-presets.js";
 
 async function startGame() {
@@ -240,8 +238,12 @@ async function startGame() {
   await initializeSystem("helicopter", "helicopter", () =>
     createHelicopter(context),
   );
+  // 调试开关 ?lightning=0：整档不建闪电，environment 的 setEnabled 检测不到它就会跳过。
+  // 只影响本次加载，不改变任何天气档的数值。
+  let lightningOff = params.lightning === "0" || params.lightning === "off";
+  if (lightningOff) console.info("[boot] lightning=off：本次不创建闪电");
   await initializeSystem("lightning", "lightning", () =>
-    createLightning(context),
+    lightningOff ? null : createLightning(context),
   );
   await initializeSystem("solarflare", "solarflare", () =>
     createSolarFlare(context),
@@ -259,43 +261,45 @@ async function startGame() {
     console.error("[outline] init failed", e);
   }
   // 地图 × 天气白名单：TIDEGATE 只有风雪，其它天气参数在这里就被吃掉。
+  // 解析逻辑在 environment-presets.interpretWeatherParams（纯函数，可单测）。
   let mapId = params.map === "tidegate" ? "tidegate" : "level",
-    lockedWeather = lockedWeatherForMap(mapId);
-  if (params.time || params.weather) {
-    let timeValid = params.time && TIME_PRESETS[params.time],
-      weatherValid =
-        params.weather &&
-        WEATHER_PRESETS[params.weather] &&
-        weatherAllowedForMap(mapId, params.weather);
-    if (lockedWeather && params.weather && params.weather !== lockedWeather) {
-      console.info(
-        "[boot] " + mapId + " 只接受 " + lockedWeather + "，已忽略 weather=" + params.weather,
-      );
-    }
-    if (timeValid || weatherValid || lockedWeather) {
+    weatherPlan = interpretWeatherParams(mapId, params);
+  if (weatherPlan.unlocked) {
+    console.info("[boot] wx=off：已解除 " + mapId + " 的天气锁（仅本次加载）");
+  }
+  if (weatherPlan.ignored) {
+    console.info(
+      "[boot] " + mapId + " 只接受 " + weatherPlan.lockedWeather + "，已忽略 weather=" + weatherPlan.ignored,
+    );
+  }
+  if (weatherPlan.explicit) {
+    if (weatherPlan.timeOfDay || weatherPlan.weather || weatherPlan.lockedWeather) {
       // 显式参数即使等于默认也 force 应用，避免“指定了晴天却还是湿的”歧义
       context.environment.set(
         {
-          timeOfDay: timeValid ? params.time : undefined,
-          weather: weatherValid ? params.weather : lockedWeather || undefined,
+          timeOfDay: weatherPlan.timeOfDay || undefined,
+          weather: weatherPlan.weather || weatherPlan.lockedWeather || undefined,
         },
         true,
       );
     } else {
+      // wx=off 但没给 time/weather：落到晴/黎明，避免"随机天气"让对比没有基准
       context.environment.set(DEFAULT_ENV, true);
     }
   } else if (params.shot || params.bench) {
     // 幂等：environment 构造时已是 DEFAULT_ENV，set 不触发 applyStatic，
     // wetApplied 保持 false，mats.uniforms.wet 保持 1，截图与原版一致。
     // 被锁的图不存在“默认天气”，直接套锁定档（TIDEGATE 的构图就是按雪天验收的）。
-    context.environment.set(lockedWeather ? { weather: lockedWeather } : DEFAULT_ENV);
-  } else if (lockedWeather) {
+    context.environment.set(
+      weatherPlan.lockedWeather ? { weather: weatherPlan.lockedWeather } : DEFAULT_ENV,
+    );
+  } else if (weatherPlan.lockedWeather) {
     // 只锁天气、时段仍随机：同一张图的时段差（22m / 26m / 19m / 11m）是玩法本体。
     let times = Object.keys(TIME_PRESETS);
     context.environment.set(
       {
         timeOfDay: times[Math.floor(context.rng() * times.length)],
-        weather: lockedWeather,
+        weather: weatherPlan.lockedWeather,
       },
       true,
     );

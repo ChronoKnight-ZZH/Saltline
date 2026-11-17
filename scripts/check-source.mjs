@@ -47,7 +47,8 @@ const EXPECTED_IMPORTS = {
     "createSolarFlare",
     "DEFAULT_ENV",
     "TIME_PRESETS",
-    "WEATHER_PRESETS",
+    // 天气档解析已从 runtime 内联逻辑移进 presets 层（可单测），契约改为断言新入口
+    "interpretWeatherParams",
   ],
   "src/app/showcases.js": ["environmentShowcaseModule"],
   "src/audio/library.js": ["_9"],
