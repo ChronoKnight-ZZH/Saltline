@@ -557,14 +557,16 @@ var Go = {
     roll: 0.6,
   },
   // M3: night helicopter rotor loop（低音区避开 gull_rotor 的中频）
+  // peak/ref/roll 是“能不能听见”的关键：旧值 0.4 / 6 / 0.4 在 50m 斜距上
+  // 只剩约 0.067 的峰值，加上样本几乎全是次低频，实际听不到。
   helicopter: {
     gen: _9,
     n: 1,
     sr: pl,
-    peak: 0.4,
+    peak: 0.8,
     loop: 1,
-    ref: 6,
-    roll: 0.4,
+    ref: 14,
+    roll: 0.3,
   },
   music_drone: {
     gen: G8,

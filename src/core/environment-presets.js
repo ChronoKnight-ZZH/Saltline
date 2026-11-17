@@ -215,7 +215,9 @@ var LIGHTNING_PEAK_CAP = 30;
 var HELICOPTER_TUNING = {
   radius: 45,
   height: 28,
-  speed: 6,
+  // 巡航速度在 helicopter.js 里是轨道相位推进率（dt * speed * 0.18 * speedK）。
+  // 6 → 3（乘以 50%）：一圈约 24s→47s，掠过时更长、更容易看清机头朝向与旋翼。
+  speed: 3,
   // 14° 锥角：贴集装箱阴影能躲
   beamHalfAngle: (14 * Math.PI) / 180,
   beamRange: 40,

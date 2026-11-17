@@ -2344,25 +2344,45 @@ function* W8(i, e) {
   return Rv(s, i * 8, !0);
 }
 
-// M3: night helicopter rotor loop (2s, seamless)。频率取 0.5 整数倍，
-// 保证循环首尾相位闭合，避免 WebAudio loop 点爆音。
+// M3: 夜间直升机旋翼循环（2.5s 生成 + 0.35s 交叉淡化 → 2s 无缝环）。
+// 旧版只有 19~92Hz 的纯低频正弦：笔记本喇叭/多数耳机几乎听不到，
+// 玩家会觉得“发动机完全没有声音”。这里分成三层重写：
+//   ① 低频：机身/传动 36/54/90Hz 的轰鸣（保留原有的压迫感）
+//   ② 拍击：18Hz 桨叶通过频率的 “wop” 包络，带起 72/216Hz 泛音
+//   ③ 中频：180Hz 齿轮箱 + 340Hz 涡轮啸叫（喇叭能听见的部分）
+//   ④ 叶尖湍流噪声，首尾交叉淡化，循环点仍无爆音。
 function* _9(i, e) {
-  let n = i * 2,
+  let fade = Math.round(i * 0.35),
+    n = i * 2 + fade,
     s = new Float32Array(n);
+  let rnd = typeof e === "function" ? e : Math.random;
+  // 桨叶通过频率：主旋翼 4.5 转/秒 × 4 片 = 18Hz（2s 内正好 36 个整周期）
   for (let r = 0; r < n; r++) {
     let a = r / i,
-      l = vt * 2 * a,
-      g = l + 0.35 * Math.sin(l * 0.5 + 1.3);
+      l = vt * a,
+      blade = vt * 4.5 * a,
+      chop = Math.pow(0.5 + 0.5 * Math.sin(blade), 2); // 0~1 的拍击包络
     s[r] =
-      (Math.sin(g * 18.5) +
-        0.6 * Math.sin(g * 23 + 1.2) +
-        0.3 * Math.sin(g * 9.5) +
-        0.2 * Math.sin(g * 46)) *
-      0.16 *
-      (0.8 + 0.2 * Math.sin(l + 0.6));
+      // ① 机身/传动低鸣
+      Math.sin(l * 36) * 0.42 +
+      Math.sin(l * 54 + 0.6) * 0.18 +
+      Math.sin(l * 90 + 1.1) * 0.09 +
+      // ② 桨叶拍击（时间上的冲击感主要来自这条包络）
+      chop *
+        (Math.sin(l * 18) * 0.3 +
+          Math.sin(l * 72) * 0.22 +
+          Math.sin(l * 216) * 0.2) +
+      // ③ 中频持续音：齿轮箱 + 涡轮啸叫（柔相调制，避免变成死板音叉）
+      Math.sin(l * 180 + Math.sin(l * 4.5) * 0.9) * 0.3 +
+      Math.sin(l * 340 + Math.sin(l * 9) * 1.6) * 0.18 +
+      // ④ 叶尖湍流噪声：底噪 0.05，拍击时抬到 0.13
+      (rnd() * 2 - 1) * (0.05 + 0.08 * chop);
   }
-  return [s];
+  // 头部与额外尾段交叉淡化，循环点永远对齐
+  return [Rv(s, i * 2, !0)];
 }
+
+
 
 export {
   vt,

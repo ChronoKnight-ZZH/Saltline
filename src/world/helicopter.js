@@ -32,6 +32,8 @@ var STOP_FADE = 0.12;
 
 var tmpA = new Vector3();
 
+var tmpB = new Vector3();
+
 var tmpC = new Vector3();
 
 // 角度插值（处理 ±π 环绕），让机头转向不跳变
@@ -41,6 +43,33 @@ function dampAngle(cur, target, lambda, dt) {
     Math.PI;
   return cur + d * Math.min(1, lambda * dt);
 }
+
+// 模型机头指向本地 -Z（apache-model 里雷达罩在 z=-2.65、尾桨在 z=+6.1）。
+// atan2(vx, vz) 得到的偏航角是「本地 +Z 为前方」的约定，两者相差 180°；
+// 少了这个偏移，机头就会朝机尾方向飞（即“飞行朝向是反的”）。
+var MODEL_NOSE_OFFSET = Math.PI; // -180°
+
+// 横卧 8 字巡逻航线（绕地图中心原点，不是绕玩家）：
+//   x = R·sin t，z = R·sin t·cos t（z 向幅度减半，形成横 8 字）。
+// 在上面叠三组慢速调制，让航线不会每圈重复：
+//   · 半径呼吸（约 60s 周期，±10%）：一圈宽、一圈窄
+//   · 巡航中心漂移（约 50–100s 周期）：整条 8 字在场地上来回平移
+//   · 高度双级起伏（快摆 ±3.4m + 慢漂 ±2.2m）
+// setEnabled（初始位置）与 update（每帧目标点）共用这一个函数，避免两处公式走偏。
+function pathPoint(t, orbitR, height, out) {
+  let sx = Math.sin(t),
+    cz = Math.cos(t),
+    radius = orbitR * (1 + 0.1 * Math.sin(t * 0.33 + 0.4));
+  out.x = 5.0 * Math.sin(t * 0.11) + radius * sx;
+  out.z =
+    4.0 * Math.sin(t * 0.17 + 2.1) +
+    radius * sx * cz +
+    2.5 * Math.sin(t * 0.62 + 0.9);
+  out.y = height + Math.sin(t * 2.0) * 3.4 + Math.sin(t * 0.45 + 1.4) * 2.2;
+  return out;
+}
+
+
 
 // 把单位锥体（ConeGeometry(0.5, 1)：本地 y ∈ [-0.5, 0.5]，顶点在 +y）
 // 摆放成「顶点落在 origin、底面中点在 origin + dir*range」的光锥。
@@ -70,7 +99,9 @@ function createHelicopter(context) {
     enabled: false,
     active: false,
     pos: new Vector3(),
-    prevPos: new Vector3(),
+    // 航线目标点在上一帧的值（只用来取切线方向；null = 首帧还没基准）
+    targetX: null,
+    targetZ: null,
     yaw: 0,
     orbitA: 0,
     trackT: 0,
@@ -197,13 +228,18 @@ function createHelicopter(context) {
     if (state.model) state.model.root.visible = true;
     state.orbitA = rng() * Math.PI * 2;
     state.trackT = state.orbitA; // 8 字轨迹起始相位随机
-    // 初始位置：绕地图中心原点
-    state.pos.set(
-      Math.sin(state.trackT) * state.orbitR,
-      state.height,
-      Math.sin(state.trackT) * Math.cos(state.trackT) * state.orbitR,
-    );
-    state.prevPos.copy(state.pos);
+    // 初始位置与目标点：都取航线在 trackT 处的解析点
+    pathPoint(state.trackT, state.orbitR, state.height, tmpB);
+    state.pos.set(tmpB.x, tmpB.y, tmpB.z);
+    state.targetX = tmpB.x;
+    state.targetZ = tmpB.z;
+    // 初始机头直接对准航线切线，避免起飞瞬间机头乱摆一圈
+    {
+      let t0 = state.trackT;
+      pathPoint(t0 + 1e-3, state.orbitR, state.height, tmpA);
+      state.yaw =
+        Math.atan2(tmpA.x - tmpB.x, tmpA.z - tmpB.z) + MODEL_NOSE_OFFSET;
+    }
     // 光柱方向：向下偏，绕 Y 随机方位，M3 不旋转
     state.beamDir
       .set(0.18, -1, 0)
@@ -211,12 +247,14 @@ function createHelicopter(context) {
       .applyAxisAngle(Y_AXIS, rng() * Math.PI * 2);
     state.spotT = 0;
     state.lastSpot.clear();
-    // 音效
+    // 音效（旋翼循环）：位置化 loop，靠近/远离由 PannerNode 距离衰减处理。
+    // 音量 0.8 + 素材 peak 0.8：50m 斜距下 rms 约 0.09（≈ -21dBFS），
+    // 能听清发动机/桨叶声，又不会盖过枪声与爆炸。
     if (context.audio && context.audio.loop) {
       try {
         state.loop = context.audio.loop("helicopter", {
           pos: state.pos,
-          gain: 0.7,
+          gain: 0.8,
         });
       } catch {
         state.loop = null;
@@ -235,31 +273,42 @@ function createHelicopter(context) {
       return;
     let player = context.player;
     if (!player || !player.pos) return;
-    // 1. 横卧 8 字巡逻轨迹（绕地图中心原点巡航，而非玩家）：
-    //    x = R·sin t，z = R·sin t·cos t（z 向幅度减半，形成横 8 字）。
-    //    巡航速度沿轨迹脉动；战斗锁定/齐射时减速；机头始终朝运动切线方向。
+    // 1. 航线：8 字 + 慢速调制（半径呼吸 / 中心漂移 / 高度起伏），公式在 pathPoint。
+    //    巡航速度沿轨迹脉动；战斗锁定/齐射时减速；机头始终朝航线切线。
     let alertMul =
       state.mode === "lock" || state.mode === "engage"
         ? HELI_COMBAT.alertSpeedMul
         : 1;
     let speedK = 0.65 + 0.35 * Math.sin(state.trackT * 2.0); // 0.30~1.0 快慢交替
+    let prevTargetX = state.targetX,
+      prevTargetZ = state.targetZ;
     state.trackT +=
       dt * HELICOPTER_TUNING.speed * 0.18 * speedK * alertMul;
-    let sx = Math.sin(state.trackT);
-    let cz = Math.cos(state.trackT);
-    let targetX = state.orbitR * sx;
-    let targetZ = state.orbitR * sx * cz;
-    let targetY = state.height + Math.sin(state.trackT * 2.0) * 4.0; // 约 24~32m 起伏
-    state.prevPos.copy(state.pos);
+    pathPoint(state.trackT, state.orbitR, state.height, tmpB);
+    let targetX = tmpB.x,
+      targetY = tmpB.y,
+      targetZ = tmpB.z;
+    state.targetX = targetX;
+    state.targetZ = targetZ;
     state.pos.x = damp(state.pos.x, targetX, 3.5, dt);
     state.pos.y = damp(state.pos.y, targetY, 3.5, dt);
     state.pos.z = damp(state.pos.z, targetZ, 3.5, dt);
-    // 机头朝运动方向（实际速度向量）；速度过小时保持原朝向避免抖头
-    tmpA.copy(state.pos).sub(state.prevPos);
-    if (tmpA.lengthSq() > 0.02) {
-      let targetYaw = Math.atan2(tmpA.x, tmpA.z);
-      state.yaw = dampAngle(state.yaw, targetYaw, 5, dt);
+    // 机头朝航线切线：用「目标点位移」而不是「机身位移」取方向，
+    // 后者受 damp 拖尾影响、在急转处会突然偏出很大角度。
+    // 模型前进轴是本地 -Z，所以再加 MODEL_NOSE_OFFSET（-180°）。
+    if (prevTargetX != null) {
+      let dTX = targetX - prevTargetX,
+        dTZ = targetZ - prevTargetZ;
+      if (dTX * dTX + dTZ * dTZ > 1e-6) {
+        state.yaw = dampAngle(
+          state.yaw,
+          Math.atan2(dTX, dTZ) + MODEL_NOSE_OFFSET,
+          8,
+          dt,
+        );
+      }
     }
+
     // 2. 光柱几何
     state.beamOrigin.copy(state.pos);
     state.beamOrigin.y -= 0.5;
@@ -308,8 +357,10 @@ function createHelicopter(context) {
           0;
         try {
           state.loop.setPos(state.pos);
-          // M3.md 3.4：雨声掩蔽降低音量
-          state.loop.setGain(0.7 * (1 - clamp(mask, 0, 1) * 0.3));
+          // M3.md 3.4：雨声掩蔽降低音量（0.8 基准，与上面的创建音量保持一致）
+          state.loop.setGain(0.8 * (1 - clamp(mask, 0, 1) * 0.3));
+          // 发动机负载轻微起伏（±3% 回放速率）：避免 2s 循环听成死板嗡嗡声
+          state.loop.setPitch(1 + 0.03 * Math.sin(state.trackT * 0.9 + 0.6));
         } catch {}
       }
     }
