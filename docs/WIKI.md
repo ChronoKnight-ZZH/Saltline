@@ -88,6 +88,8 @@ src/game.js
 
 `initializeSystem` 会捕获初始化异常：当 `FALLBACKS` 中存在同名实现时使用降级对象，否则重新抛出；单个系统耗时超过 150 ms 会输出 `[boot] <name> <ms>ms`。
 
+> M1–M6 追加的系统在 `game` 之后装配：`helicopter` → `lightning` → `environment` → `snow`（`createSnow`，紧跟在 environment 之后，只读它的 `snowLevel`/`wind`）→ `solarflare` → `outline`。`environment` 必须晚于 helicopter/lightning，否则 `applyStatic` 检测不到它们。
+
 初始化完成后调用 `context.render.onLevelReady()`，随后在 `?shot=1` 或 `?autostart=1` 时执行 `context.game.start({ skipIntro: true })`，最后进入 `renderer.setAnimationLoop`。
 
 ### 1.4 主循环与更新顺序
@@ -270,8 +272,9 @@ src/
 │  ├─ apache-model.js            # AH-64 阿帕奇程序化模型（机身/旋翼/短翼武器/起落架）
 │  ├─ heli-model.js              # 简版模型，仅作 apache-model 失败时的回退
 │  ├─ missile.js                 # 直升机对地导弹飞行体
-│  ├─ level/                     # 关卡（3）
+│  ├─ level/                     # 关卡（4）
 │  │  ├─ level.js                # 关卡装配、目标、出生点、撤离点
+│  │  ├─ tidegate.js             # 第二张地图 TIDEGATE（冷链东堤，锁暴风雪）
 │  │  ├─ buildings.js            # 静态建筑与道具放置工具
 │  │  └─ placement.js            # 摆件、线缆、楼梯、堆叠等放置辅助
 │  ├─ backdrop/                  # 远景（5）
@@ -310,10 +313,11 @@ src/
 │  ├─ models.js                  # 四足 Gull 与 Hound 骨骼/网格
 │  ├─ walker.js                  # Gull 行为
 │  └─ drone.js                   # Hound 行为
-├─ effects/                      # 特效（5）
+├─ effects/                      # 特效（6）
 │  ├─ effects.js                 # 特效系统与事件接线
-│  ├─ lightning.js               # 雷暴闪电调度与触发（M4）
+│  ├─ lightning.js               # 雷暴闪电调度与触发（M4），含雷雪档
 │  ├─ solarflare.js              # 白天晴天的太阳耀斑/EMP 事件（§5）
+│  ├─ snow.js                    # 风雪点云（跟随相机、读 environment.snowLevel/wind）
 │  ├─ particles.js               # 粒子纹理、批次、材质
 │  └─ pools.js                   # 弹壳/碎屑/贴花复用池
 ├─ audio/                        # 音频（4）
@@ -2148,8 +2152,8 @@ context.game.resume();
 | `core/quality.js` | 画质预设选择 | `core/config` | `chooseQuality(name)` | 依据设备能力自动降级 |
 | `core/fallbacks.js` | 非核心系统降级实现 | vendor | `FALLBACKS`、`noop` | 单系统失败不阻断启动 |
 | `core/geometry.js` | 共享几何、UV 校正、变换、合并、静态合批、网格创建 | vendor | `boxGeometry`、`beveledBoxGeometry`、`cylinderGeometry`、`tubeGeometry`、`transformGeometry`、`colorGeometry`、`mergeGeometries`、`mergeGeometryParts`、`batchStaticMeshes`、`createMesh`、`mergeAttributes` | 统一 UV 尺度与合批规则，减少重复几何代码 |
-| `core/environment-presets.js` | 时间/天气预设、combine 纯函数、LIGHTNING_TIMING、HELICOPTER_TUNING | vendor、`core/config` | `TIME_PRESETS`、`WEATHER_PRESETS`、`DEFAULT_ENV`、`FOG_K`、`combine`、`LIGHTNING_TIMING`、`HELICOPTER_TUNING` | 数据与状态中枢分离，便于调参 |
-| `core/environment.js` | 状态中枢、能见度模型、perception、表现写入 | `core/{random,math,environment-presets}`、`context.render/ground/mats` | `createEnvironment` | 唯一环境状态源，驱动渲染/地面/材质 |
+| `core/environment-presets.js` | 时间/天气预设、combine 纯函数、LIGHTNING_TIMING、HELICOPTER_TUNING、地图天气白名单 | vendor、`core/config` | `TIME_PRESETS`、`WEATHER_PRESETS`、`DEFAULT_ENV`、`FOG_K`、`combine`、`LIGHTNING_TIMING`、`HELICOPTER_TUNING`、`MAP_WEATHER_LOCK`、`weatherAllowedForMap`、`lockedWeatherForMap`、`fogDensityFor`、`snowFogColor` | 数据与状态中枢分离，便于调参；TIDEGATE 只允许 `blizzard` |
+| `core/environment.js` | 状态中枢、能见度模型、perception、风向量、表现写入 | `core/{random,math,environment-presets}`、`context.render/ground/mats` | `createEnvironment`（含 `snowLevel`/`windLevel`/`wind` getter） | 唯一环境状态源，驱动渲染/地面/材质/雪粒子 |
 
 ### 5.4 渲染（`src/render/`）
 
@@ -2222,6 +2226,7 @@ context.game.resume();
 | `effects/effects.js` | 枪口焰、曳光、命中、火花、烟、尘、爆炸、弹壳、水花、碎屑、发射器 | vendor、`core/config`、`core/geometry`、`effects/particles`、`effects/pools` | `createEffects`、`effectsShowcaseModule`、`showcaseEffects` | 事件驱动的表现层，不反向改玩法 |
 | `effects/particles.js` | 粒子纹理/图集、批次、材质、渲染顺序 | vendor | `Wc`、`H1`、`Bb`、`Af`、`bv`、`oo`、`_v`、`n0`、`Mv`、`V1`、`Gc`、`W1`、`Ob`、`Ev`、`qc`、`Xc`、`Rf`、`q1`、`da`、`Hb`、`ws`、`Oo`、`X1`、`Y1`、`Wb` | 批量渲染与纹理复用 |
 | `effects/pools.js` | 弹壳、碎屑、贴花池 | vendor、`effects/particles` | `$1`、`Z1`、`j1` | 避免高频分配/GC |
+| `effects/snow.js` | 风雪点云：相机环绕盒、风向漂移、按 `snowLevel` 调 `drawRange` | vendor、`context.camera/environment/render` | `createSnow` | 只读环境状态，晴天自动隐藏，CPU 每帧位移 |
 | `audio/audio.js` | 音频图、混音总线、3D 声像、混响、音乐调度、事件接线 | `audio/synthesis`、`audio/library` | `createAudio` | 集中管理 voice 与性能预算 |
 | `audio/synthesis.js` | DSP 原语、噪声/滤波/包络/混响/失真/重采样 | 无 | `vt`、`ao`、`St`、`Xt`、`Ns`、`Qn`、`Av`、`tn`、`di`、`Vo`、`lo`、`co`、`Se`、`Us`、`Wo`、`em`、`at`、`ei`、`dn`、`Q1`、`Kb`、`Qb`、`ml`、`KR`、`QR`、`e8`… | 程序化音频，无采样资源 |
 | `audio/library.js` | 音色注册表与逻辑名映射 | `audio/synthesis`、`audio/music` | `Go`、`i_`、`s_` | 名称到合成器的单一映射表 |

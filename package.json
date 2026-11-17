@@ -13,7 +13,8 @@
     "format": "prettier --write index.html \"src/**/*.js\" src/*.css vite.config.js scripts/*.mjs scripts/lib/*.mjs",
     "test:tts": "node --test tests/tts-briefing.test.mjs",
     "verify:archive": "node scripts/verify-archive.mjs",
-    "verify:refactor": "node scripts/verify-refactor.mjs"
+    "verify:refactor": "node scripts/verify-refactor.mjs",
+    "audit:tidegate": "node scripts/audit-tidegate-static.mjs && node scripts/audit-tidegate-smoke.mjs && node scripts/audit-tidegate-routes.mjs"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"

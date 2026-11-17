@@ -78,6 +78,9 @@ var WEATHER_PRESETS = {
     sunMul: 1.0,
     // 天空太阳盘可见度倍率（0..1）
     sunDiskMul: 1.0,
+    // 风维度（0..3）。原版 4 档只补数据，不改变既有手感。
+    windLevel: 0,
+    snowLevel: 0,
   },
   overcast: {
     visibilityMul: 0.78,
@@ -89,6 +92,8 @@ var WEATHER_PRESETS = {
     fogMul: 1.25,
     sunMul: 0.65,
     sunDiskMul: 0.2,
+    windLevel: 1,
+    snowLevel: 0,
   },
   lightRain: {
     visibilityMul: 0.5,
@@ -101,6 +106,8 @@ var WEATHER_PRESETS = {
     fogMul: 1.6,
     sunMul: 0.45,
     sunDiskMul: 0.08,
+    windLevel: 1,
+    snowLevel: 0,
   },
   heavyRain: {
     visibilityMul: 0.28,
@@ -113,6 +120,65 @@ var WEATHER_PRESETS = {
     fogMul: 2.2,
     sunMul: 0.25,
     sunDiskMul: 0.02,
+    windLevel: 2,
+    snowLevel: 0,
+  },
+  // ---- 雪档（暴风雪天气族）----
+  // 数值不是照抄设计稿，而是「平移」到当前代码基线：
+  // 设计稿的 spreadScale 写于 §4 调参之前（小雨 1.05 / 大雨 1.15），现码已是 1.15 / 1.35。
+  // 若照抄 1.20，会出现「风雪比暴雨还准」的倒挂。平移规则见
+  // docs/weather/TIDEGATE暴风雪数值平移.md：保持设计稿里的相对间距（+0.00 / +0.05）。
+  lightSnow: {
+    visibilityMul: 0.4,
+    audioMask: 0.55,
+    // 稿 1.05 = 稿小雨 1.05 → 现码小雨 1.15
+    spreadScale: 1.15,
+    rainLevel: 0.0,
+    // 雪是「覆盖」不是「打湿」：湿度归零，地面积水/反射随之关闭。
+    wetness: 0.0,
+    lightning: false,
+    fogMul: 1.0,
+    // 小雪用光学厚度反解雾密度，fogMul 仅作兼容占位。
+    fogOptical: 0.55,
+    fogColor: 0xd8e2ec,
+    fogMix: 0.8,
+    // 天空也要跟着雪雾走：只压雾色不压天，抬头仍是一片晴空，会直接穿帮。
+    skyMix: 0.45,
+    // 稿未给直射光强：雪天云层更厚、更漫射，直射要低于同档小雨（0.45），
+    // 亮度靠 ambient + 雪面反照补偿（反照材质尚未接线，见平移文档）。
+    sunMul: 0.35,
+    sunDiskMul: 0.06,
+    windLevel: 1,
+    snowLevel: 0.5,
+    // 雪天直升机停飞（设计稿 1.2 / 1.4）。
+    helicopter: false,
+    groundFriction: { snow: 0.92, ice: 0.85 },
+    snowAccum: 0.5,
+  },
+  blizzard: {
+    visibilityMul: 0.12,
+    audioMask: 0.82,
+    // 稿 1.20 = 稿暴雨 1.15 + 0.05 → 现码暴雨 1.35 + 0.05
+    spreadScale: 1.4,
+    rainLevel: 0.0,
+    wetness: 0.0,
+    // 雷雪：闪电仍由 lightning.js 调度，间隔拉长到 60–120s。
+    lightning: "thundersnow",
+    fogMul: 1.0,
+    // 在「能见度距离」处的光学不透明度：0.90 ≈ 26m 处九成被雪幕吃掉。
+    fogOptical: 0.9,
+    fogColor: 0xe4ecf2,
+    fogMix: 0.88,
+    skyMix: 0.8,
+    // 稿未给：暴雪是全漫射，直射压到接近 0（低于暴雨 0.25），阴影基本消失。
+    sunMul: 0.1,
+    sunDiskMul: 0.0,
+    windLevel: 3,
+    snowLevel: 1.0,
+    helicopter: false,
+    groundFriction: { snow: 0.82, ice: 0.7 },
+    snowAccum: 1.0,
+    screenFx: { snowBlind: true, windShake: 0.35 },
   },
 };
 
@@ -131,6 +197,8 @@ var LIGHTNING_TIMING = {
   // §6：分雨档间隔（替换 lightning.js 里的硬编码表）
   lightRainInterval: { min: 14, max: 26 },
   heavyRainInterval: { min: 6, max: 12 },
+  // 雷雪：雪幕里的放电比雷雨稀疏得多，设计稿 1.5 给的是 60–120s 一次。
+  blizzardInterval: { min: 60, max: 120 },
   // §6：雷声比闪光晚到（拟合现实）。闪光给情报，雷声给转移窗口。
   thunderDelay: { min: 1.8, max: 2.8 },
   // §6：雷声响度窗口内的追加听觉遮蔽与持续时间
@@ -189,14 +257,64 @@ var HELI_COMBAT = {
   alertSpeedMul: 0.6,   // 警觉/锁定时轨道速度倍率
 };
 
+// ---- 雪雾的数值平移 ----
+// 1) 颜色：设计稿给的是「白天」的绝对色，夜间必须按时间环境光压暗，
+//    否则子时暴风雪会变成一块发光的白墙（亮度违背环境光）。
+function snowFogColor(base, ambient) {
+  let k = Math.max(0.18, Math.min(1, ambient / 1.15));
+  return new Color(base).multiplyScalar(k);
+}
+
+// 2) 密度：FogExp2 的雾量不是「能见度线性」。旧公式 FOG_K/visibility × fogMul
+//    在 26m 能见度下只有 (0.02×3.2)² ≈ 0.4% 的雾量——等于没有雪幕。
+//    雪档改用光学厚度反解：d = sqrt(-ln(1-T)) / visibility，
+//    T 就是「在能见度距离处被雾吃掉的比例」。雨档保持原公式不动。
+function fogDensityFor(w, visibility) {
+  if (w.fogOptical) {
+    let T = Math.min(0.98, Math.max(0.05, w.fogOptical));
+    return Math.sqrt(-Math.log(1 - T)) / visibility;
+  }
+  return (FOG_K / visibility) * w.fogMul;
+}
+
+// ---- 地图 × 天气的白名单 ----
+// TIDEGATE 只有风雪：这张图的地形（雪坡/栈桥/冷库）与节奏按雪盲标定，
+// 雨档混进来只会变成「湿码头的阴天」，所以直接在预设层锁死。
+var MAP_WEATHER_LOCK = {
+  tidegate: ["blizzard"],
+};
+
+function weatherAllowedForMap(mapId, weather) {
+  let allow = MAP_WEATHER_LOCK[mapId];
+  return !allow || allow.indexOf(weather) >= 0;
+}
+
+function lockedWeatherForMap(mapId) {
+  let allow = MAP_WEATHER_LOCK[mapId];
+  return allow && allow.length ? allow[0] : null;
+}
+
 function combine(timeOfDay, weather) {
   let time = TIME_PRESETS[timeOfDay] || TIME_PRESETS[DEFAULT_ENV.timeOfDay],
     w = WEATHER_PRESETS[weather] || WEATHER_PRESETS[DEFAULT_ENV.weather],
-    visibility = time.visibility * w.visibilityMul;
+    visibility = time.visibility * w.visibilityMul,
+    snowFog = w.fogColor ? snowFogColor(w.fogColor, time.ambient) : null,
+    fogColor = snowFog
+      ? time.fogColor
+          .clone()
+          .lerp(snowFog, w.fogMix == null ? 0.85 : w.fogMix)
+      : time.fogColor.clone(),
+    skyTop = time.skyTop.clone(),
+    skyHorizon = time.skyHorizon.clone();
+  if (snowFog && w.skyMix) {
+    skyTop.lerp(snowFog, w.skyMix);
+    // 地平线本来就是雾的边界，直接向 fogColor 靠拢更自然。
+    skyHorizon.lerp(fogColor, w.skyMix + 0.1);
+  }
   return {
     visibility,
-    fogColor: time.fogColor.clone(),
-    fogDensity: (FOG_K / visibility) * w.fogMul,
+    fogColor,
+    fogDensity: fogDensityFor(w, visibility),
     exposure: time.exposure,
     sunDir: time.sunDir.clone(),
     sunColor: time.sunColor.clone(),
@@ -204,17 +322,30 @@ function combine(timeOfDay, weather) {
     sunIntensity: time.sunIntensity * w.sunMul,
     shadowIntensity: w.sunMul,
     sunDisk: time.sunDisk * w.sunDiskMul,
-    skyTop: time.skyTop.clone(),
-    skyHorizon: time.skyHorizon.clone(),
+    skyTop,
+    skyHorizon,
     ambient: time.ambient,
     rainLevel: w.rainLevel,
     wetness: w.wetness,
     audioMask: w.audioMask,
     spreadScale: w.spreadScale,
+    // 雪档新增维度：表现层（雪粒子/雪盲）与未来玩法（脚印/冰面）共用。
+    snowLevel: w.snowLevel || 0,
+    windLevel: w.windLevel == null ? 0 : w.windLevel,
+    snowAccum: w.snowAccum || 0,
+    groundFriction: w.groundFriction
+      ? { snow: w.groundFriction.snow, ice: w.groundFriction.ice }
+      : null,
+    screenFx: w.screenFx || null,
     lampOn: time.lampOn,
     musicMood: time.musicMood,
-    lightningEnabled: w.lightning,
-    helicopterEnabled: timeOfDay === "midnight" && !w.lightning,
+    lightningMode: w.lightning === true ? "thunder" : w.lightning || false,
+    lightningEnabled: !!w.lightning,
+    // 雪天显式停飞；其余沿用「子夜雷雨停飞」的原规则。
+    helicopterEnabled:
+      w.helicopter === false
+        ? false
+        : timeOfDay === "midnight" && !w.lightning,
   };
 }
 
@@ -228,5 +359,10 @@ export {
   HELICOPTER_TUNING,
   HELI_COMBAT,
   SOLAR_FLARE_TUNING,
+  MAP_WEATHER_LOCK,
+  weatherAllowedForMap,
+  lockedWeatherForMap,
+  snowFogColor,
+  fogDensityFor,
   combine,
 };

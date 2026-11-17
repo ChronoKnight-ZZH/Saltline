@@ -464,6 +464,9 @@ function u_(i, e, t) {
       overcast: { rain: 0.12, wind: 0.45, sea: 0.7 },
       lightRain: { rain: 0.55, wind: 0.65, sea: 0.8 },
       heavyRain: { rain: 1.0, wind: 0.9, sea: 0.9 },
+      // 雪：雨层几乎归零，风层拉满（风雪的主声源是风，不是降水）。
+      lightSnow: { rain: 0.06, wind: 0.85, sea: 0.85 },
+      blizzard: { rain: 0.0, wind: 1.0, sea: 0.95 },
     },
     TIME_MOOD = {
       dawn: "calm",

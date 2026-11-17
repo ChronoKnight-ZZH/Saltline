@@ -67,13 +67,16 @@ var _lanes = {
   B: "Close quarters \u2014 rain blinds us both and masks your steps. Read the enemy on the flash, move on the thunder.",
   C: "Night sweep \u2014 stay in the dark pools, and hold still when the beam crosses.",
   D: "Storm \u2014 thick squall, no helicopter. Hug cover, push between flashes.",
+  E: "Whiteout \u2014 blowing snow, no helicopter. Sight is down to metres; wind is the only thing covering your steps.",
 };
 
 // Lane 判定：雨优先于时间（B 覆盖任意时间 + 雨；D 是夜 + 雨的重叠但同样归 B/D）。
-// 与 §8 表格一致：A=白天×晴/阴，B=雨天（全天候），C=夜×晴/阴，D=夜×雨。
+// 雪单独归 E（TIDEGATE 全天候风雪），与 §8 表格一致：A=白天×晴/阴，B=雨天，C=夜×晴/阴，D=夜×雨。
 function pickLane(timeOfDay, weather) {
-  let rainy = weather === "lightRain" || weather === "heavyRain",
+  let snowy = weather === "blizzard" || weather === "lightSnow",
+    rainy = weather === "lightRain" || weather === "heavyRain",
     night = timeOfDay === "midnight";
+  if (snowy) return "E";
   if (rainy) return night ? "D" : "B";
   return night ? "C" : "A";
 }

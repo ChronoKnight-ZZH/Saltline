@@ -66,6 +66,48 @@ var LANES = {
 
 var LANE_ORDER = ["recon", "assault", "stealth", "balanced"];
 
+// ---- TIDEGATE 的插入配置：天气锁死为暴风雪，只让玩家选时段 ----
+// 「取消第二张图的其它天气」在这里落地：白毛风图的四张卡全部是 blizzard，
+// 时段差（22m / 26m / 19m / 11m）才是这图真正的难度选择。
+// 数值按 combine(时段, blizzard) 的能见度换算：dawn 180×0.12=21.6、noon 220×0.12=26.4、
+// dusk 160×0.12=19.2、midnight 90×0.12=10.8。
+var WHITEOUT_LANES = {
+  whiteoutDawn: {
+    label: "Whiteout \xB7 Dawn",
+    tagline: "Blizzard \xB7 sight ~22 m",
+    cells: [["dawn", "blizzard"]],
+    tip: "First light through snow. Twenty metres of sight. The boat's lamp is your only long reference.",
+  },
+  whiteoutNoon: {
+    label: "Whiteout \xB7 Noon",
+    tagline: "Blizzard \xB7 sight ~26 m",
+    cells: [["noon", "blizzard"]],
+    tip: "Flat light and no shadows. Read the ground, not the sky.",
+  },
+  whiteoutDusk: {
+    label: "Whiteout \xB7 Dusk",
+    tagline: "Blizzard \xB7 sight ~19 m",
+    cells: [["dusk", "blizzard"]],
+    tip: "Warm light scattering in snow haze. Pretty, and useless for spotting.",
+  },
+  whiteoutMidnight: {
+    label: "Whiteout \xB7 Midnight",
+    tagline: "Blizzard \xB7 sight ~11 m",
+    cells: [["midnight", "blizzard"]],
+    tip: "Eleven metres. Blind walking, deaf enemies. Thundersnow is your only glimpse of the far field.",
+  },
+};
+
+var WHITEOUT_ORDER = [
+  "whiteoutDawn",
+  "whiteoutNoon",
+  "whiteoutDusk",
+  "whiteoutMidnight",
+];
+
+// 查询表：简报文案 / 反推 lane / 抽格都用它，避免两套 lane 各自特判。
+var ALL_LANES = Object.assign({}, LANES, WHITEOUT_LANES);
+
 // ---- 地图选择：一个关卡一张卡 ----
 // 卡片只放“选之前必须知道”的东西：是哪块地、怎么结束、新不新。
 // 缩略图是纯 SVG 的平面示意（不引外部图片，单文件构建里也不多一个请求）。
@@ -81,31 +123,44 @@ var MAPS = [
   {
     id: "tidegate",
     name: "Tidegate",
-    tagline: "Cold-store quay \xB7 raised catwalk \xB7 boat at the north pier",
+    tagline: "Blizzard only \xB7 frozen harbour \xB7 half-buried depot \xB7 icebreaker",
     badge: "New",
-    brief: "Long waterfront sightlines. Climb the catwalk for the last uplink.",
+    brief:
+      "Four zones on one sheet of ice: a cracking lead to the west, the buried depot east, the cable tower on the north hill, and an icebreaker taking survivors off the south field. Sight 11–26 m.",
   },
 ];
 
 // 平面示意：一堆矩形拼出的关卡轮廓，颜色只用地板灰 + 信号橙。
 function mapThumbMarkup(id) {
   if (id === "tidegate") {
+    // 西冰面 / 东货仓 / 北缆车塔 / 南破冰船 + 跨冰缝的栈桥
     return `<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
       <rect x="0" y="0" width="160" height="90" fill="#14181b"/>
-      <rect x="0" y="64" width="160" height="26" fill="#1d2a31"/>
-      <rect x="6" y="26" width="26" height="32" fill="#2a3137" stroke="#4a535a"/>
-      <rect x="36" y="20" width="34" height="44" fill="#242b30" stroke="#3d464d"/>
-      <rect x="38" y="22" width="7" height="7" fill="#323a40"/>
-      <rect x="49" y="22" width="7" height="7" fill="#323a40"/>
-      <rect x="38" y="34" width="7" height="7" fill="#323a40"/>
-      <rect x="60" y="30" width="8" height="8" fill="#323a40"/>
-      <rect x="76" y="14" width="22" height="50" fill="#20272c" stroke="#ffb347" stroke-width="1.4"/>
-      <rect x="80" y="18" width="14" height="10" fill="#2c353b"/>
-      <line x1="78" y1="46" x2="96" y2="55" stroke="#4a535a"/>
-      <rect x="104" y="26" width="30" height="34" fill="#243036" stroke="#4a535a"/>
-      <rect x="134" y="22" width="18" height="46" fill="#20282e" stroke="#4a535a"/>
-      <line x1="98" y1="40" x2="140" y2="40" stroke="#ffb347" stroke-width="2"/>
-      <circle cx="140" cy="40" r="2.6" fill="#ffb347"/>
+      <rect x="0" y="0" width="56" height="90" fill="#1c2b33"/>
+      <rect x="4" y="6" width="44" height="74" fill="#233540" stroke="#3d5a66"/>
+      <line x1="12" y1="18" x2="30" y2="20" stroke="#41606d"/>
+      <line x1="14" y1="52" x2="34" y2="50" stroke="#41606d"/>
+      <rect x="56" y="0" width="9" height="90" fill="#101a1f" stroke="#32505c"/>
+      <rect x="55" y="56" width="11" height="7" fill="#3a4a52" stroke="#6b7f88"/>
+      <rect x="65" y="14" width="86" height="52" fill="#242b30" stroke="#4a535a"/>
+      <rect x="68" y="17" width="12" height="9" fill="#323a40"/>
+      <rect x="82" y="17" width="12" height="9" fill="#323a40"/>
+      <rect x="96" y="17" width="12" height="9" fill="#323a40"/>
+      <rect x="110" y="17" width="12" height="9" fill="#323a40"/>
+      <rect x="68" y="30" width="12" height="9" fill="#323a40"/>
+      <rect x="82" y="30" width="12" height="9" fill="#323a40"/>
+      <rect x="100" y="30" width="18" height="12" fill="#1a2126" stroke="#ffb347"/>
+      <rect x="136" y="26" width="12" height="18" fill="#2a3238" stroke="#4a535a"/>
+      <rect x="60" y="0" width="60" height="14" fill="#2a3339" stroke="#4a535a"/>
+      <rect x="86" y="2" width="7" height="10" fill="#20272c" stroke="#ffb347" stroke-width="1.2"/>
+      <line x1="84" y1="12" x2="70" y2="26" stroke="#4a535a"/>
+      <path d="M46 88 L46 76 Q84 70 124 76 L124 88 Z" fill="#20282e" stroke="#4a535a"/>
+      <rect x="58" y="76" width="30" height="12" fill="#2a3238" stroke="#4a535a"/>
+      <line x1="70" y1="70" x2="70" y2="76" stroke="#4a535a"/>
+      <circle cx="30" cy="26" r="2.6" fill="#ffb347"/>
+      <circle cx="109" cy="36" r="2.6" fill="#ffb347"/>
+      <circle cx="89" cy="6" r="2.6" fill="#ffb347"/>
+      <circle cx="86" cy="82" r="2.6" fill="#ffb347"/>
     </svg>`;
   }
   return `<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
@@ -141,6 +196,8 @@ var WEATHER_TEXT = {
   overcast: "Overcast.",
   lightRain: "Light rain.",
   heavyRain: "Heavy rain.",
+  lightSnow: "Light snow.",
+  blizzard: "Blizzard.",
 };
 
 var TIME_LABEL = {
@@ -155,10 +212,12 @@ var WEATHER_LABEL = {
   overcast: "Overcast",
   lightRain: "Light rain",
   heavyRain: "Heavy rain",
+  lightSnow: "Light snow",
+  blizzard: "Blizzard",
 };
 
 function briefText(timeOfDay, weather, laneKey) {
-  let lane = LANES[laneKey];
+  let lane = ALL_LANES[laneKey];
   if (!lane) return "";
   return (
     TIME_TEXT[timeOfDay] + " " + WEATHER_TEXT[weather] + " " + lane.tip
@@ -166,7 +225,7 @@ function briefText(timeOfDay, weather, laneKey) {
 }
 
 function profileText(timeOfDay, weather, laneKey) {
-  let lane = LANES[laneKey],
+  let lane = ALL_LANES[laneKey],
     laneLabel = lane ? lane.label : "Custom";
   return (
     "Mission profile: " +
@@ -178,10 +237,20 @@ function profileText(timeOfDay, weather, laneKey) {
   );
 }
 
+// 雪档 → 对应的白毛风卡（雪档只在 TIDEGATE 存在；旧图拿到雪天也能反推出一个可读的名字）。
+var WHITEOUT_BY_TIME = {
+  dawn: "whiteoutDawn",
+  noon: "whiteoutNoon",
+  dusk: "whiteoutDusk",
+  midnight: "whiteoutMidnight",
+};
+
 // 由时间/天气反推 lane（URL 直接开局、?shot / ?autostart 没有简报屏幕时用）。
-// 优先级与 LANES 分组一致：heavyRain → assault；夜晴/夜阴 → stealth；
+// 优先级与 LANES 分组一致：雪 → whiteout；heavyRain → assault；夜晴/夜阴 → stealth；
 // 白天晴/阴 → recon；其余（含 dusk 全部与 lightRain）→ balanced。
 function inferLane(timeOfDay, weather) {
+  if (weather === "blizzard" || weather === "lightSnow")
+    return WHITEOUT_BY_TIME[timeOfDay] || "whiteoutMidnight";
   if (weather === "heavyRain") return "assault";
   if (
     timeOfDay === "midnight" &&
@@ -198,6 +267,8 @@ function inferLane(timeOfDay, weather) {
 
 // 纯 CSS 卡片动画的标记（无脚本、无 GPU 开销，reduced-motion 时全部静止）。
 function laneAnimMarkup(key) {
+  if (key.indexOf("whiteout") === 0)
+    return '<i class="la-flake f1"></i><i class="la-flake f2"></i><i class="la-flake f3"></i><i class="la-flake f4"></i>';
   if (key === "recon")
     return '<i class="la-sun"></i><i class="la-enemy e1"></i><i class="la-enemy e2"></i>';
   if (key === "assault")
@@ -342,7 +413,10 @@ var TOUCH_CONTROLS_HTML = `
 function createMenus(context, e) {
   let t = document.getElementById("ui"),
     n = loadSettings(),
-    s = document.createElement("div");
+    s = document.createElement("div"),
+    // TIDEGATE 只给风雪卡：牌面从 LANE_ORDER 换成 WHITEOUT_ORDER。
+    whiteoutMap = !!(context.params && context.params.map === "tidegate"),
+    laneOrder = whiteoutMap ? WHITEOUT_ORDER : LANE_ORDER;
   ((s.className = "menu"),
     (s.dataset.screen = "none"),
     (s.innerHTML = `
@@ -431,11 +505,11 @@ function createMenus(context, e) {
         <h2 class="mb-h">Choose your insertion</h2>
       </div>
       <div class="mb-grid">
-        ${LANE_ORDER.map((key) => {
-          let l = LANES[key];
+        ${laneOrder.map((key) => {
+          let l = ALL_LANES[key];
           return `
           <button class="lane-btn" data-lane="${key}" aria-pressed="false">
-            <div class="lane-anim lane-${key}" aria-hidden="true">${laneAnimMarkup(key)}</div>
+            <div class="lane-anim lane-${key.indexOf("whiteout") === 0 ? "whiteout" : key}" aria-hidden="true">${laneAnimMarkup(key)}</div>
             <b>${l.label}</b>
             <span>${l.tagline}</span>
           </button>`;
@@ -643,7 +717,7 @@ function createMenus(context, e) {
   }
 
   function pickCell(laneKey) {
-    let cells = LANES[laneKey].cells;
+    let cells = ALL_LANES[laneKey].cells;
     return cells[Math.floor(Math.random() * cells.length)];
   }
 
@@ -670,7 +744,7 @@ function createMenus(context, e) {
   }
 
   function selectLane(laneKey) {
-    if (!LANES[laneKey]) return;
+    if (!ALL_LANES[laneKey]) return;
     ((briefing.lane = laneKey),
       (briefing.cell = pickCell(laneKey)),
       syncLaneButtons(),
